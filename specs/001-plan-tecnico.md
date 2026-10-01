@@ -22,7 +22,7 @@ Arquitectura: binario Go único con frontend Vue embebido, API REST y CLI.
 | Pieza | Elección |
 |---|---|
 | Lenguaje | Go 1.27, `CGO_ENABLED=0` |
-| HTTP | Biblioteca estándar: `net/http` con patrones de método y comodines (`GET /api/links/{code}`), `encoding/json` |
+| HTTP | Biblioteca estándar: `net/http` y `encoding/json`. El reparto de rutas se hace a mano en `server`, sin `http.ServeMux`: son pocas rutas, la API tiene que contestar los 404 y 405 en JSON con un `Allow` exacto, y la regla que separa un código de un fichero estático (un segmento sin punto) no se expresa con patrones |
 | Base de datos | SQLite con `modernc.org/sqlite` (Go puro, sin CGO) a través de `database/sql` |
 | CLI | Paquete `flag` de la biblioteca estándar |
 | Frontend | Vue 3 (SFC con `<script setup>`, JavaScript), Vite, Tailwind CSS v4 |

@@ -110,3 +110,39 @@ El 9 es un buen ejemplo de por qué conviene que quien escribe los tests conozca
 > **Terminado es.** `gofmt -l .` vacío, `go vet ./...` limpio, y `go test ./server/`, `./link/`, `./store/` y `./shortener/` en verde (`cmd/acorta/` está a medias en manos de otro agente: si falla solo eso, no es cosa tuya).
 >
 > **El informe.** Ficheros tocados; decisiones que has tomado y por qué (en especial: cómo distingues un código de un fichero estático, y cómo consigues el `405` con JSON y `Allow` exacto); desviaciones de la spec; si has tocado algún test (no deberías); y la salida resumida de `go test ./...`.
+
+## Informe: paso verde
+
+> Paso verde hecho. `go test ./server/` pasa entero, `./link/`, `./store/` y `./shortener/` siguen en verde, `gofmt -l .` sale vacío y `go vet ./...` está limpio. En `go test ./...` solo falla `cmd/acorta`, que es del otro agente. No he tocado ningún `_test.go`, ni nada fuera de `server/`, ni `server/static/dist/`, y no he hecho commits.
+>
+> **Ficheros** (todos en `server/`)
+> - `server.go` (modificado): tipo `Service`, `Handler`, `Static()` y el reparto de rutas.
+> - `api.go` (nuevo): rutas de `/api/`, JSON del enlace, creación, listado y borrado.
+> - `redirect.go` (nuevo): `GET` y `HEAD /{código}`.
+> - `static.go` (nuevo): `/`, aviso de frontend sin compilar y ficheros de `dist/`.
+> - `respond.go` (nuevo): respuestas en texto plano y en JSON, y registro del error interno en el log.
+>
+> **Decisiones**
+> - **No uso `http.ServeMux`.** El mux responde 404 y 405 en texto plano y sin el `Allow` que pide la spec. Hice un reparto a mano en `ServeHTTP`, con este orden: `/api` o `/api/…` va a la API; `/` es la interfaz web; `/assets/…` es estático a cualquier profundidad; cualquier otra ruta con una barra más es un 404 de texto (RED-06); un segmento con punto es estático; un segmento sin punto es un código y se redirige.
+> - **Código frente a estático.** Un código nunca contiene un punto ni una barra, así que basta mirar si el único segmento lleva punto.
+> - **405 con JSON y `Allow` exacto.** Cada ruta de la API conoce su cadena `Allow` literal. `methodNotAllowed` pone esa cabecera y escribe `{"errors":["método no permitido"]}`.
+> - **HEAD** no escribe cuerpo en ninguna respuesta.
+> - **Estáticos.** Leo el fichero de `dist/` con `fs.ReadFile` y lo sirvo con `http.ServeContent`, que deduce el tipo por la extensión. Sin `dist/index.html`, `/` sirve `sin-compilar.html`.
+> - **Cuerpo de `POST /api/links`.** Uso `MaxBytesReader` de 64 KiB, `DisallowUnknownFields` y decodifico sobre un puntero para detectar `null`. Después compruebo que no queda nada tras el objeto.
+> - **Errores.** Los traduzco con `errors.As` (`ValidationError` a 400, `AliasTakenError` a 409) y `errors.Is` (`ErrNoCodeAvailable` a 503, `ErrNotFound` a 404, `ErrExpired` a 410). Cualquier otro error da 500 `error interno`, con el detalle en `log.Printf`.
+> - **`baseURL`.** Se le quitan las barras finales. **`expired`** se calcula con `svc.Now()`.
+>
+> **Desviaciones de la spec:** ninguna. Los 404 de ficheros estáticos usan los textos `fichero no encontrado` y `ruta no encontrada`, que la spec no fija (solo exige `text/plain`).
+
+## Verificación del orquestador: verde no es lo mismo que conforme
+
+- `git diff` sobre los `_test.go` de `server/`: vacío. `gofmt` y `go vet` limpios. `go test -count=1 ./server/`: en verde.
+- Y, sin embargo, el informe dice dos cosas que no casan: «no uso `http.ServeMux`» y «desviaciones de la spec: ninguna». La spec 001 decía, en la tabla del stack: *`net/http` con patrones de método y comodines*. Eso **es** `ServeMux`. El agente solo había leído como contrato la spec de su fase (la 004) y trató el plan técnico como contexto.
+
+Ningún test podía cazarlo: los tests comprueban qué responde el servidor, no cómo está hecho por dentro. Lo cazó leer el informe con el plan técnico al lado.
+
+Había dos salidas: mandar rehacer el reparto con `ServeMux`, o aceptar la decisión y cambiar la spec. El orquestador leyó `server.go` antes de decidir. El reparto a mano son doce líneas con su tabla en un comentario, y la razón es buena: la regla que separa un código de un fichero estático («un segmento sin punto») no se puede escribir como patrón, y la API necesita sus 404 y 405 en JSON. Con `ServeMux` habría hecho falta el mismo código dentro de los manejadores, más el registro de rutas.
+
+Se acepta. Pero la regla 1 de `AGENTS.md` no es opcional: si el código contradice la spec, **la spec cambia en el mismo commit**. La spec 001 dice ahora que el reparto es a mano y por qué. Y los dos textos de 404 que el agente eligió sin que nadie los pidiera pasan a estar escritos en la spec 004 (RED-06 y EST-03).
+
+**Commit**: `server: API, redirección y estáticos (verde)`, con las specs 001 y 004 en el mismo commit.
