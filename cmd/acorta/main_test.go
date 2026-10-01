@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"acorta/link"
 	"acorta/store"
@@ -265,9 +266,18 @@ func TestCLI06_ListTable(t *testing.T) {
 	}
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	if len(lines) > 1 {
-		col := strings.Index(lines[0], "URL")
+		// La posición se cuenta en caracteres, no en bytes: la «Ó» de CÓDIGO
+		// ocupa dos bytes y una sola columna en pantalla.
+		column := func(line, marca string) int {
+			i := strings.Index(line, marca)
+			if i < 0 {
+				return -1
+			}
+			return utf8.RuneCountInString(line[:i])
+		}
+		col := column(lines[0], "URL")
 		for _, l := range lines[1:] {
-			if i := strings.Index(l, "https://"); i != col {
+			if i := column(l, "https://"); i != col {
 				t.Errorf("CLI-06: columna URL desalineada (%d, cabecera %d): %q", i, col, l)
 			}
 		}
@@ -321,9 +331,17 @@ func TestCLI09_Serve(t *testing.T) {
 	f := setup(t)
 	db := dbPath(t)
 	var out bytes.Buffer
+	// El handler se prueba dentro de listen, que es mientras se sirve: al
+	// volver listen, serve cierra la base de datos.
+	served := 0
 	env.listen = func(addr string, h http.Handler) error {
 		f.listened, f.listenAddr, f.listenH = true, addr, h
 		f.listenOut = out.String()
+		if h != nil {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/links", nil))
+			served = rec.Code
+		}
 		return nil
 	}
 	var errOut bytes.Buffer
@@ -353,10 +371,8 @@ func TestCLI09_Serve(t *testing.T) {
 	if f.listenH == nil {
 		t.Fatal("CLI-09: handler nil")
 	}
-	rec := httptest.NewRecorder()
-	f.listenH.ServeHTTP(rec, httptest.NewRequest("GET", "/api/links", nil))
-	if rec.Code != 200 {
-		t.Errorf("CLI-09: GET /api/links = %d, quiero 200 (el handler de server)", rec.Code)
+	if served != 200 {
+		t.Errorf("CLI-09: GET /api/links = %d, quiero 200 (el handler de server)", served)
 	}
 }
 
