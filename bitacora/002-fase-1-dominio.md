@@ -140,3 +140,39 @@ El orquestador da por buenas las tres que quedan: no cambian nada que un usuario
 > **Terminado es.** `gofmt -l .` vacío, `go vet ./...` limpio y `go test ./...` en verde en todo el repo.
 >
 > **El informe.** Ficheros tocados; decisiones que has tomado y por qué; cualquier desviación de la spec; si has tocado algún test (no deberías); y la salida resumida de `go test ./...`.
+
+## Informe: paso verde
+
+> Paso verde hecho: `link` está implementado y `go test ./...` pasa en todo el repo. `gofmt -l .` sale vacío y `go vet ./...` está limpio. No hice commits.
+>
+> **Ficheros tocados**
+> - Solo `link/link.go`.
+> - No toqué ningún test: `link/link_test.go` queda intacto y no hizo falta cambiarlo, porque ninguno contradecía la spec. Tampoco toqué la bitácora, `go.mod` ni `go.sum`.
+> - Solo uso la biblioteca estándar, sin `time.Now()` ni `crypto/rand`.
+>
+> **Decisiones**
+> - **`Validate`:** recorta los tres campos y llama a un comprobador por campo (`checkURL`, `checkAlias`, `parseExpiresAt`). Cada uno devuelve solo su primer error. Con cualquier mensaje devuelve `Valid{}`; sin ellos, la lista es nil.
+> - **URL:** el orden es vacía, más de 2048 bytes, `url.Parse`, esquema, `Hostname()`. `url.Parse` pone el esquema en minúsculas para comparar, pero la URL se guarda tal cual (URL-07). `Hostname()` vacío cubre `https://`, `http:///ruta` y `https://:8080`.
+> - **Alias:** el orden es longitud en runas (`utf8.RuneCountInString`), caracteres `a-z0-9-`, guion al principio o al final, y reservado.
+> - **`expires_at`:** se parsea con `time.RFC3339`, se pasa a UTC y se trunca al segundo. Se compara con `now` también truncado: si no es posterior, error (CAD-03).
+> - **`Link.Expired`:** `ExpiresAt != nil && !now.Before(*ExpiresAt)`.
+> - **`NewCode`:** lee un byte cada vez con `io.ReadFull`. Descarta los bytes ≥ 252 y usa `b % 36` sobre el alfabeto. Si la fuente falla o se agota, devuelve `""` y el error envuelto con `%w`.
+> - **Resto:** `Reserved` es un mapa con `api` y `assets`. `ValidationError.Error()` une los mensajes con `"; "` y `AliasTakenError.Error()` da `alias: "promo" ya está en uso`.
+> - **Comentarios:** en español, con el porqué de los límites (252, bytes frente a caracteres, truncado a segundos).
+>
+> **Desviaciones de la spec:** ninguna.
+>
+> **Salida de `go test ./...`**
+> ```
+> ok  	acorta/link	0.002s
+> ```
+
+## Verificación del orquestador
+
+- `git diff -- link/link_test.go` vacío: el agente no tocó los tests para llegar al verde.
+- `gofmt` y `go vet` limpios; `go test -count=1 ./link/` en verde, 97 casos, cobertura del 100 % de las sentencias.
+- Leído `link/link.go` entero (unas 190 líneas): sin reloj ni azar globales, sin dependencias fuera de la biblioteca estándar, y los mensajes de error coinciden letra a letra con la spec.
+
+**Commit**: `link: validación y generación de códigos (verde)`.
+
+Tiempo total del agente en la fase: unos tres minutos (rojo, ajuste y verde). Lo que más tiempo llevó de la fase no fue código: fue decidir qué decía la spec.
