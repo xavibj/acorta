@@ -120,3 +120,71 @@ Casi todo lo que el agente eligió era razonable, así que la revisión consiste
 > **Terminado es.** `gofmt -l .` vacío, `go vet ./...` limpio y `go test ./...` en verde en todo el repo.
 >
 > **El informe.** Ficheros tocados; decisiones que has tomado y por qué; desviaciones de **cualquier** spec, también del plan técnico (`specs/001`), aunque te parezcan justificadas; si has tocado algún test (no deberías); y la salida resumida de `go test ./...`.
+
+## Informe: paso verde
+
+> Paso verde casi hecho: 22 de los 24 tests de `cmd/acorta` pasan y los 2 que fallan tienen un fallo del propio test. Me paro en esos dos sin tocar `main_test.go`, como pide el encargo.
+>
+> **Ficheros tocados:** solo `cmd/acorta/main.go`. No he tocado ningún test, ni la bitácora, ni otros paquetes, ni `go.mod`/`go.sum`. No hay commits. `gofmt -l .` está vacío y `go vet ./...` sale limpio.
+>
+> 1. **`TestCLI06_ListTable` (CLI-06): el test mide en bytes lo que la tabla alinea en caracteres.**
+>    - `strings.Index(lines[0], "URL")` devuelve un desplazamiento en bytes. La cabecera `CÓDIGO` tiene una `Ó` de 2 bytes, así que el desplazamiento sale 40 en la cabecera y 39 en las filas.
+>    - `text/tabwriter`, que es lo que pide la spec, alinea por caracteres. Visualmente la tabla está bien alineada.
+>    - Para pasar el test habría que desalinear la tabla a ojo. Propuesta de arreglo del test: comparar con `utf8.RuneCountInString(lines[0][:idx])`.
+> 2. **`TestCLI09_Serve` (CLI-09): el test usa el handler después de que `run` haya cerrado la base de datos.**
+>    - Tras `run`, el test hace `GET /api/links` contra el handler que guardó y obtiene 500, porque el almacén ya está cerrado.
+>    - En el uso real `listen` bloquea y el almacén sigue abierto mientras se sirve. Solo se cierra al volver `listen`.
+>    - Si no cerrara el almacén, rompería lo que pide el encargo, «Cierra siempre el almacén». Propuesta: hacer la petición dentro del stub de `listen`, que es cuando el almacén sigue abierto.
+>
+> **Decisiones**
+> - Cada subcomando tiene su `flag.FlagSet` con `ContinueOnError` y la salida de `flag` silenciada. Los mensajes los escribo yo: `-h` imprime `uso: …` y los flags en stdout y sale con 0; un flag desconocido imprime `error: …` y `uso: …` en stderr y sale con 2; un número de argumentos incorrecto imprime solo `uso: …` y sale con 2.
+> - Para `-ttl` miro con `fs.Visit` si se pasó el flag, porque `-ttl ""` explícito también es error (salida 2). La caducidad se calcula con `svc.Now()` y se pasa como `ExpiresAt` en RFC 3339, así que la validación de «fecha futura» sigue siendo de `link`.
+> - Errores de validación: una línea `error: …` por cada mensaje de `ValidationError.Messages`, sin reescribirlos.
+> - Cuando el error es `link.ErrNotFound` imprimo solo el mensaje del centinela (`enlace no encontrado`). El almacén lo envuelve con la operación (`borrar "promo": …`) y CLI-08 pide el mensaje corto.
+> - `list` usa `text/tabwriter` con relleno de 2 espacios. Lee el reloj una sola vez para marcar `caducado`.
+> - El mensaje de arranque de `serve` usa `net.SplitHostPort`. Sin host dice `localhost`.
+> - `serve` abre la base de datos antes de escuchar y pasa `server.Static()` a `server.Handler`.
+>
+> **Desviaciones de la spec o del plan técnico:**
+> - `serve` no maneja señales ni hace apagado ordenado. Con el `listen` inyectado (`http.ListenAndServe` en producción) un Ctrl-C mata el proceso sin cerrar el almacén. No está en la spec y no lo he añadido. Convendría decidirlo.
+> - `list` acepta `-base-url` porque la sinopsis lo incluye, pero no lo usa en la salida.
+> - Con `-h` en un subcomando, `PrintDefaults` imprime los flags con el formato propio de `flag`. La spec no fija ese formato.
+
+## Verificación del orquestador
+
+Otra vez la regla 3, y esta vez por partida doble. Los dos tests estaban mal de formas distintas y las dos son instructivas:
+
+- **CLI-06** comparaba posiciones en bytes. En inglés ese test habría pasado siempre. Falló porque la cabecera dice `CÓDIGO`: la `Ó` ocupa dos bytes y una columna. La tabla estaba bien; el test, no. La salida fácil para el agente era quitar el acento o rellenar a mano un espacio de más: código peor para contentar a un test equivocado.
+- **CLI-09** comprobaba el servidor **después** de que `serve` hubiera terminado y cerrado la base de datos. Para pasarlo había que dejar la base de datos abierta para siempre, es decir, introducir una fuga de recursos.
+
+El orquestador leyó los dos tests, confirmó los dos diagnósticos y los corrigió él, en un commit propio y anterior al de la implementación.
+
+Las «desviaciones» del informe también tenían premio. Esta vez el encargo pedía listar desviaciones de **cualquier** spec (lección de la fase 4), y salieron tres:
+
+| Lo que dijo el agente | Qué se hace |
+|---|---|
+| `list` acepta `-base-url` pero no lo usa | Era un error **de la spec**: la sinopsis de `list` lo incluía y su tabla no muestra URL cortas. Se quita de la spec 005 y de los tests, y el agente lo quita del código |
+| `serve` no cierra el almacén con Ctrl-C | Se queda así en la v1. SQLite en modo WAL soporta que el proceso muera sin cerrar; un apagado ordenado es una mejora, no un fallo |
+| El detalle de un flag mal usado lo escribe la biblioteca, en inglés | Se acepta y se dice en la spec, en vez de traducir mensajes ajenos comparando cadenas |
+
+**Commits**: `cmd/acorta: corrige dos tests que ninguna implementación correcta podía pasar` y `Spec 005: list no lleva -base-url, y el error de flags`.
+
+## Encargo: cierre del verde
+
+> Tenías razón en los dos tests: los ha corregido el orquestador (CLI-06 cuenta caracteres; CLI-09 prueba el handler dentro de `listen`) y ya están en un commit. Y también en que `-base-url` no pintaba nada en `list`: era un error de la spec. Vuelve a leer `specs/005-cli.md`: `list` ya no lleva `-base-url` (sinopsis y tabla de «Configuración»).
+>
+> Quita `-base-url` de `list` en `cmd/acorta/main.go` y deja `go test ./...` en verde en todo el repo. No toques `main_test.go`. Mismos límites: solo `cmd/acorta/`, sin commits.
+>
+> Informe: qué has cambiado y la salida resumida de `go test ./...`.
+
+## Informe: cierre del verde
+
+> Hecho: `list` ya no tiene `-base-url` y `go test ./...` pasa en todo el repo.
+>
+> **Cambio en `cmd/acorta/main.go`:** la sinopsis `synopsisList` ahora es `acorta list [-db RUTA]`, igual que la spec. La ayuda general la hereda. He quitado de `cmdList` el flag `-base-url`. No he tocado `main_test.go`, ni nada fuera de `cmd/acorta/`, ni la bitácora. No hay commits.
+>
+> **Comprobaciones:** `gofmt -l .` sale vacío y `go vet ./...` sale limpio. `go test ./...`: `cmd/acorta`, `link`, `server`, `shortener` y `store` en verde.
+
+`make check` completo, ejecutado por el orquestador: formato, `go vet`, los cinco paquetes Go en verde, los 38 tests de la interfaz en verde y el build del frontend sin errores.
+
+**Commit**: `cmd/acorta: la CLI (verde)`.
