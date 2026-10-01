@@ -9,6 +9,7 @@ Es el proyecto conductor del tutorial [iadev.xavi.net](https://iadev.xavi.net): 
 Hace falta Go 1.27 y, para la interfaz web, Node 22 o superior.
 
 ```sh
+git clone https://github.com/xavibj/acorta.git && cd acorta
 make build                      # compila el frontend y el binario: bin/acorta
 bin/acorta serve                # http://localhost:8080
 ```
@@ -60,3 +61,7 @@ Las reglas están en [`AGENTS.md`](AGENTS.md): nada se implementa sin estar en u
 | `web/` | Interfaz en Vue 3 (su build no está en Git) |
 | `specs/` | El contrato: 100 criterios numerados |
 | `bitacora/` | Cómo se construyó, fase a fase |
+
+## Licencia
+
+[MIT](LICENSE).
