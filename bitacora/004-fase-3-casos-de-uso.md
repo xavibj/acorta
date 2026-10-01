@@ -124,3 +124,27 @@ Dos notas del orquestador:
 > **Terminado es.** `gofmt -l .` vacío, `go vet ./...` limpio, `go test ./...` y `go test -race ./shortener/` en verde.
 >
 > **El informe.** Ficheros tocados; decisiones que has tomado y por qué; desviaciones de la spec; si has tocado algún test (no deberías); y la salida resumida de `go test ./...`.
+
+## Informe: paso verde
+
+> Paso verde hecho. Todo `shortener` pasa: `go test ./...` da ok en `link`, `shortener` y `store`, y `go test -race ./shortener/` también. `gofmt -l .` sale vacío y `go vet ./...` limpio. No he tocado ningún test y no hay commits.
+>
+> **Fichero tocado:** `shortener/shortener.go`. El paquete solo importa la biblioteca estándar y `link`, no `store`.
+>
+> **Decisiones**
+> - **`New`:** con `nil` usa `time.Now` y `link.NewCode(rand.Reader)` (COD-04).
+> - **Reloj en `Create`:** se lee una sola vez, en UTC y truncado a segundos. Ese mismo instante se usa en `link.Validate` y como `CreatedAt`, para que no se desfasen.
+> - **Alias:** `Insert` directo, sin `Get` previo. Si el almacén devuelve `ErrCodeTaken`, se convierte en `*link.AliasTakenError`. Cualquier otro error se devuelve envuelto con `%w`.
+> - **Código generado:** hasta 5 intentos. Un código reservado se descarta sin insertarlo, y `ErrCodeTaken` hace reintentar. Si se agotan los 5, devuelve `link.ErrNoCodeAvailable`. El error del generador o cualquier otro error de `Insert` se devuelve envuelto, sin más intentos (COD-02).
+> - **`Resolve`:** un enlace caducado da `ErrExpired` envuelto, también con `countVisit=false`. Si `AddVisit` falla, devuelve ese error y no la URL (RES-05). Un borrado entre `Get` y `AddVisit` da `ErrNotFound` desde el almacén. La atomicidad de VIS-02 la da el `UPDATE visits = visits + 1` del almacén, no el servicio.
+> - **`List`, `Delete` y `Now`:** delegan en el almacén y el reloj.
+>
+> **Desviaciones de la spec:** ninguna.
+
+## Verificación del orquestador
+
+- `git diff -- shortener/shortener_test.go` vacío.
+- `gofmt` y `go vet` limpios; `go test -count=1 ./...` en verde en `link`, `store` y `shortener`; `go test -race ./shortener/` en verde.
+- `shortener` no importa `store`: depende de la interfaz, como pide la spec 001.
+
+**Commit**: `shortener: crear, resolver, listar y borrar (verde)`.
