@@ -42,10 +42,11 @@ func (s *Store) AddVisit(ctx context.Context, code string) error
 ## Criterios
 
 - **ALM-01** — Dada una ruta que no existe, cuando se abre, entonces se crea el fichero con el esquema. Abrir dos veces la misma ruta no falla ni pierde datos.
-- **ALM-02** — Dado un enlace insertado, cuando se cierra el almacén y se vuelve a abrir, entonces `Get` lo devuelve con los mismos valores en todos sus campos (incluida una caducidad nula).
+- **ALM-02** — Dado un enlace insertado, cuando se cierra el almacén y se vuelve a abrir, entonces `Get` lo devuelve con los mismos valores en todos sus campos (incluida una caducidad nula). `Insert` guarda el enlace tal como llega, también su `Visits`: no lo pone a 0.
 - **ALM-03** — Dado un código que ya existe, cuando se inserta otro enlace con ese código, entonces error `link.ErrCodeTaken` y el enlace original no cambia.
 - **ALM-04** — `Get` de un código que no existe devuelve `link.ErrNotFound`. La comparación es exacta y distingue mayúsculas.
-- **ALM-05** — `List` devuelve los enlaces del último insertado al primero; sin enlaces, una lista vacía (no `nil` con error).
+- **ALM-05** — `List` devuelve los enlaces del último insertado al primero; sin enlaces, una lista vacía (no `nil` con error). El orden es el de inserción (la columna `id`), no el de `created_at`: dos enlaces creados en el mismo segundo siguen teniendo un orden.
 - **ALM-06** — `Delete` de un código que existe lo elimina; de uno que no existe devuelve `link.ErrNotFound`. Tras borrarlo, se puede insertar otro enlace con el mismo código.
 - **ALM-07** — `AddVisit` suma 1 al contador en una sola sentencia (`UPDATE … SET visits = visits + 1`). Con 50 llamadas simultáneas sobre el mismo código, el contador acaba en 50. Sobre un código que no existe devuelve `link.ErrNotFound`.
-- **ALM-08** — Los instantes se guardan y se devuelven en UTC con precisión de segundos.
+- **ALM-08** — Los instantes se guardan y se devuelven en UTC con precisión de segundos. Las fracciones se descartan, no se redondean: `10:30:45.900` se guarda como `10:30:45`.
+- **ALM-09** — `Open` con una ruta que no se puede crear (un directorio que no existe) devuelve un error y no deja nada abierto.
