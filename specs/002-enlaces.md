@@ -36,7 +36,7 @@ La validación devuelve **todos los errores a la vez**: como mucho uno por campo
 Cuando no se envía alias, acorta genera el código.
 
 - **COD-01** — Un código generado tiene exactamente 6 caracteres del alfabeto `abcdefghijklmnopqrstuvwxyz0123456789`. Cada carácter sale de un byte de la fuente de azar: el byte `b` da el carácter de la posición `b % 36`, y los bytes de 252 en adelante se descartan y se lee otro, para que los 36 caracteres sean igual de probables. Los bytes `255, 0, 1, 2, 3, 4, 5` dan `abcdef`. Si la fuente falla o se agota, `NewCode` devuelve ese error envuelto.
-- **COD-02** — Si el código generado ya existe o es una palabra reservada, se descarta y se genera otro, hasta 5 intentos en total. Si los 5 fallan, crear devuelve el error `ErrNoCodeAvailable` y no guarda nada.
+- **COD-02** — Si el código generado ya existe o es una palabra reservada, se descarta y se genera otro, hasta 5 intentos en total. Si los 5 fallan, crear devuelve el error `ErrNoCodeAvailable` y no guarda nada. Solo se reintenta por esos dos motivos: si falla el generador, o el almacén da cualquier otro error, crear devuelve ese error envuelto, sin más intentos y sin guardar nada.
 - **COD-03** — Acortar dos veces la misma URL crea dos enlaces con códigos distintos.
 - **COD-04** — Los códigos salen de una fuente de azar criptográfica (`crypto/rand`): no son consecutivos ni predecibles. El generador se inyecta en el servicio para que los tests usen uno determinista.
 
@@ -70,6 +70,7 @@ Es lo que ocurre cuando alguien abre la URL corta.
 - **RES-02** — Dado un código que no existe, entonces error `ErrNotFound`.
 - **RES-03** — Dado un código caducado, entonces error `ErrExpired`.
 - **RES-04** — La búsqueda es exacta y distingue mayúsculas: si existe `oferta`, resolver `Oferta` da `ErrNotFound`.
+- **RES-05** — Si no se puede sumar la visita, no se devuelve la URL: resolver devuelve el error del almacén. Si lo que ha pasado es que alguien ha borrado el enlace entre que se encontró y se contó, el error es `ErrNotFound`.
 
 ## Visitas
 
@@ -81,7 +82,7 @@ Es lo que ocurre cuando alguien abre la URL corta.
 ## Listar
 
 - **LIS-01** — Devuelve todos los enlaces, del más reciente al más antiguo según el orden en que se crearon.
-- **LIS-02** — Cada enlace lleva código, URL, visitas, fecha de creación, caducidad (si tiene) y si está caducado en el momento de listar.
+- **LIS-02** — Cada enlace lleva código, URL, visitas, fecha de creación y caducidad (si tiene). Si está caducado en el momento de listar no es un campo guardado: lo calcula quien muestra la lista con `l.Expired(svc.Now())`, para que la API, la CLI y los tests usen el mismo reloj.
 - **LIS-03** — Sin enlaces, devuelve una lista vacía, no un error.
 
 ## Borrar
