@@ -201,10 +201,13 @@ describe('formulario', () => {
     await submit(w)
     expect(w.text()).toContain('http://localhost:8080/nuevo1')
     // resultado destacado + fila del listado
-    expect(buttons(w, 'Copiar')).toHaveLength(2)
-    for (const i of [0, 1]) {
+    // Se localizan los dos antes de pulsar: el pulsado pasa a decir «Copiado»
+    // durante dos segundos (WEB-11) y dejaría de encontrarse por su texto.
+    const copiar = buttons(w, 'Copiar')
+    expect(copiar).toHaveLength(2)
+    for (const boton of copiar) {
       writeText.mockClear()
-      await button(w, 'Copiar', i).trigger('click')
+      await boton.trigger('click')
       await settle()
       expect(writeText).toHaveBeenCalledWith('http://localhost:8080/nuevo1')
     }
