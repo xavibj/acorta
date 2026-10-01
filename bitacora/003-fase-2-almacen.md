@@ -104,3 +104,32 @@ El 4a es el tipo de hueco que solo se ve al cruzar dos specs: la 005 prometía a
 > **Terminado es.** `gofmt -l .` vacío, `go vet ./...` limpio, `go test ./...` y `go test -race ./store/` en verde.
 >
 > **El informe.** Ficheros tocados; decisiones que has tomado y por qué (en especial: cómo reconoces el error `UNIQUE` y cómo evitas `database is locked` con escrituras simultáneas); desviaciones de la spec; si has tocado algún test (no deberías); y la salida resumida de `go test ./...`.
+
+## Informe: paso verde
+
+> Paso verde hecho: `store` está implementado y toda la suite pasa. Solo he tocado `store/store.go`; `store_test.go`, `go.mod` y `go.sum` están intactos y no he hecho commits.
+>
+> **Comprobaciones**
+> - `gofmt -l .` está vacío y `go vet ./...` está limpio.
+> - `go test ./...` pasa: `ok acorta/link` y `ok acorta/store`.
+> - `go test -race -count=3 ./store/` pasa (`ok acorta/store 1.232s`), sin avisos de carrera.
+>
+> **Decisiones**
+> - **Error UNIQUE:** `Insert` deja que la restricción `UNIQUE` decida, sin `SELECT` previo. Lo reconozco con `errors.As(err, &*sqlite.Error)` y `Code() == 2067` (`SQLITE_CONSTRAINT_UNIQUE`), y lo devuelvo envuelto con `%w` sobre `link.ErrCodeTaken`. Declaré la constante 2067 en el propio fichero para no importar el subpaquete de constantes.
+> - **Sin `database is locked`:** hay dos medidas. `db.SetMaxOpenConns(1)` serializa las escrituras dentro del proceso, así que las 50 goroutines de `AddVisit` hacen cola en Go en lugar de pelearse por el candado de SQLite. Los PRAGMA `journal_mode(WAL)` y `busy_timeout(5000)` van en la DSN (`_pragma=`), no en un `Exec`. Así se aplican a cada conexión que abra el pool y no solo a la primera. `busy_timeout` cubre además a otros procesos.
+> - **Ruta imposible (ALM-09):** `Open` llama a `db.Ping()` porque `sql.Open` es perezoso. Si algo falla, cierra la base y devuelve `nil` junto al error.
+> - **Ruta en la DSN:** la ruta va como URI `file:` con el path escapado, para que caracteres como `?` o `#` en el nombre no se interpreten como parte de la URI.
+> - **Tiempos:** se guardan con `t.UTC().Truncate(time.Second).Format(RFC3339)`, así que las fracciones se descartan y no se redondean. Al leer se devuelven en UTC, y `NULL` en `expires_at` pasa a `ExpiresAt == nil`.
+> - **Resto de operaciones:** `List` ordena por `id DESC` y devuelve un slice vacío, nunca `nil`. `Delete` y `AddVisit` usan `RowsAffected()`: si es 0, devuelven `link.ErrNotFound`. `AddVisit` es un único `UPDATE … SET visits = visits + 1`. `Insert` guarda `Visits` tal como llega. Todos los errores van envueltos con `%w`.
+>
+> **Desviaciones de la spec:** ninguna.
+>
+> **`go.mod`:** `modernc.org/sqlite` sigue como `// indirect`. Compila y pasa sin tocarlo. Ahora que `store.go` la importa directamente, el orquestador puede quitarle el `// indirect` si quiere.
+
+## Verificación del orquestador
+
+- `git diff -- store/store_test.go` vacío: los tests del rojo no se han tocado.
+- `gofmt` y `go vet` limpios; `go test -count=1 ./...` en verde (`link` y `store`); `go test -race ./store/` en verde.
+- `go mod tidy` ejecutado por el orquestador: `modernc.org/sqlite` pasa a dependencia directa.
+
+**Commit**: `store: almacén SQLite (verde)`.
