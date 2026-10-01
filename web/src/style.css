@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+/* Los controles nativos (desplegable, barras) siguen el tema del sistema. */
+:root {
+  color-scheme: light dark;
+}

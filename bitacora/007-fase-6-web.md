@@ -121,3 +121,50 @@ Un detalle del informe que merece quedarse: al releer la spec, el agente encontr
 > **Terminado es.** `npm test` en verde y `npm run build` sin errores ni avisos.
 >
 > **El informe.** Ficheros tocados; decisiones que has tomado y por qué; desviaciones de la spec; si has tocado algún test (no deberías); el tamaño del bundle que da el build; y la salida resumida de `npm test`.
+
+## Informe: paso verde
+
+> Paso verde casi cerrado: `npm test` da 37 de 38 en verde y `npm run build` termina sin errores ni avisos. El que falla es el test «WEB-03: al crear muestra la URL corta con su propio Copiar, además del de su fila», y creo que el error está en el test, no en el código. No he tocado `web/src/App.test.js` y no he hecho commits.
+>
+> **El test que falla.** Es el bucle `for (const i of [0, 1])` de ese test, en `web/src/App.test.js` (hacia la línea 204).
+> - Hace clic en el Copiar de posición 0 y busca después `button(w, 'Copiar', 1)`.
+> - Por WEB-11, el botón pulsado pasa a ser «Copiado» durante dos segundos, así que `buttons(w, 'Copiar')` solo devuelve ya 1 elemento y la posición 1 no existe.
+> - La implementación copia la URL correcta con los dos botones y cumple WEB-03 y WEB-11. Cualquier implementación fiel a WEB-11 fallaría igual ahí.
+> - Hace falta decidir cómo corregir el test. Por ejemplo, localizar los dos botones antes del bucle (`const bs = buttons(w,'Copiar')`) y pulsar `bs[0]` y `bs[1]`.
+>
+> **Ficheros tocados (todos en `web/src/`)**
+> - `api.js`: `listLinks`, `createLink` y `deleteLink` devuelven `{ ok, data, errors }`. Un `204` es ok con `data` nulo. Un error de red o una respuesta que no es JSON da el único mensaje de conexión (WEB-05).
+> - `App.vue`: guarda la lista, la carga y los errores de borrado. Pide la lista al montar y al pulsar Actualizar o Reintentar. Añade al principio el enlace creado sin volver a pedir la lista, y pide confirmación para borrar.
+> - `components/LinkForm.vue`: formulario y resultado destacado. Los errores y el resultado se descartan al editar un campo. Si el envío tiene éxito, el formulario vuelve al estado inicial. No valida nada en el navegador.
+> - `components/LinkList.vue`: listado, estados de vacío, de error y de carga, y errores de borrado.
+> - `components/CopyButton.vue`: nuevo. Lo usan el formulario y cada fila del listado, y muestra «Copiado» dos segundos.
+> - `style.css`: añade `color-scheme: light dark`.
+>
+> **Decisiones**
+> - **Limpieza de errores:** uso `@input` y `@change` en vez de un `watch`. Un `watch` borraría el resultado justo al vaciar el formulario tras crear.
+> - **Envío:** `expires_at` se calcula como `Date.now() + plazo` en UTC, sin milisegundos. El botón Acortar está deshabilitado con la URL vacía. También ignoro un segundo envío mientras hay una petición en curso.
+> - **Región `aria-live`:** hay una en el formulario (errores y resultado) y otra en el listado (errores de borrado y de carga).
+> - **Diseño:** Tailwind v4, una columna con `max-w-2xl`, controles de `min-h-11` (44 px) y cada campo con su `<label>`. Tema claro y oscuro con las variantes `dark:` de Tailwind. La URL corta usa `break-all` y la de destino `truncate`, para que nada desborde a 360 px.
+>
+> **Desviaciones de la spec:** ninguna. Añadí `CopyButton.vue`, que la spec no lista, solo para no duplicar el botón.
+>
+> **Bundle (`npm run build`)**: `index.html` 0,39 kB · CSS 14,45 kB (3,83 kB con gzip) · JS 73,39 kB (28,51 kB con gzip).
+>
+> **`npm test`:** `Tests 1 failed | 37 passed (38)`.
+
+## Verificación del orquestador: un test equivocado
+
+Este es el momento para el que existe la regla 3 de `AGENTS.md` («no modifiques un test para que pase; si crees que está mal, párate y dilo»). El agente tenía 37 de 38 en verde y dos atajos a mano: tocar el test, o retorcer el código para satisfacerlo (por ejemplo, que el botón no cambie a «Copiado» si hay otro, rompiendo WEB-11 de una forma que ningún otro test habría visto). No tomó ninguno. Paró y lo explicó.
+
+El orquestador leyó el test y le dio la razón: el test pulsaba el primer botón Copiar y luego buscaba «el segundo botón que dice Copiar», pero el primero ya decía «Copiado». El test contradecía a WEB-11; ninguna implementación correcta podía pasarlo.
+
+Quién corrige un test es una decisión, no un trámite: la corrección la hace el orquestador, es mínima (localizar los dos botones antes de pulsar) y va **en su propio commit**, separada de la implementación, para que en el historial se vea que el test cambió, por qué, y que no fue el implementador quien lo movió para llegar al verde.
+
+Después:
+
+- `npm test`: 38 de 38 en verde. `npm run build`: sin errores ni avisos.
+- `git diff -- web/src/App.test.js`: solo las 6 líneas de la corrección.
+- La spec 006 no listaba `CopyButton.vue`: se añade a su estructura en el mismo commit que el componente.
+- La pasada en navegador real queda para la fase 7, cuando exista el servidor.
+
+**Commits**: `web: corrige un test de WEB-03 que contradecía a WEB-11` y `web: interfaz Vue (verde)`.
