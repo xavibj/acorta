@@ -80,7 +80,7 @@ func expect(t *testing.T, args []string, wantCode int, wantOut, wantErr string) 
 // Mensajes de uso: «uso: » + la sinopsis de la spec 005.
 const (
 	usageAdd   = "uso: acorta add [-alias ALIAS] [-ttl DURACIÓN] [-db RUTA] [-base-url URL] URL"
-	usageList  = "uso: acorta list [-db RUTA] [-base-url URL]"
+	usageList  = "uso: acorta list [-db RUTA]"
 	usageRm    = "uso: acorta rm [-db RUTA] CÓDIGO"
 	usageServe = "uso: acorta serve [-addr :8080] [-db RUTA] [-base-url URL]"
 )
@@ -488,7 +488,7 @@ func TestCLI12_SubcommandHelp(t *testing.T) {
 		flags []string
 	}{
 		{[]string{"add", "-h"}, usageAdd, []string{"-alias", "-ttl", "-db", "-base-url"}},
-		{[]string{"list", "-h"}, usageList, []string{"-db", "-base-url"}},
+		{[]string{"list", "-h"}, usageList, []string{"-db"}},
 		{[]string{"rm", "-h"}, usageRm, []string{"-db"}},
 		{[]string{"serve", "-h"}, usageServe, []string{"-addr", "-db", "-base-url"}},
 	}
