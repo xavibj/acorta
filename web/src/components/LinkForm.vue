@@ -3,7 +3,8 @@ import { computed, ref } from 'vue'
 import { createLink } from '../api.js'
 import CopyButton from './CopyButton.vue'
 
-const emit = defineEmits(['created'])
+// unauthorized: la API ha respondido 401 (spec 008, AUT-13); App enfoca el campo del token.
+const emit = defineEmits(['created', 'unauthorized'])
 
 // Plazos del desplegable, en segundos. «Nunca» no envía expires_at.
 const EXPIRIES = [
@@ -48,6 +49,7 @@ async function submit() {
 
   if (!result.ok) {
     errors.value = result.errors
+    if (result.status === 401) emit('unauthorized')
     return
   }
   created.value = result.data

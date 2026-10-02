@@ -9,6 +9,13 @@ const links = ref([])
 const loading = ref(true)
 const loadFailed = ref(false)
 const deleteErrors = ref([])
+const tokenField = ref(null)
+
+// Ante un 401 al crear o borrar, el campo del token recibe el foco (spec 008, AUT-13).
+// El token guardado no se borra: puede ser una errata.
+function focusToken() {
+  tokenField.value?.focus()
+}
 
 async function load() {
   loading.value = true
@@ -27,8 +34,12 @@ async function onDelete(code) {
   deleteErrors.value = []
   if (!window.confirm(`¿Borrar /${code}?`)) return
   const result = await deleteLink(code)
-  if (result.ok) links.value = links.value.filter((l) => l.code !== code)
-  else deleteErrors.value = result.errors
+  if (result.ok) {
+    links.value = links.value.filter((l) => l.code !== code)
+    return
+  }
+  deleteErrors.value = result.errors
+  if (result.status === 401) focusToken()
 }
 
 onMounted(load)
@@ -41,8 +52,8 @@ onMounted(load)
         <h1 class="text-3xl font-bold tracking-tight">acorta</h1>
         <p class="mt-1 text-slate-600 dark:text-slate-400">Acorta una URL larga y compártela.</p>
       </header>
-      <TokenField />
-      <LinkForm @created="onCreated" />
+      <TokenField ref="tokenField" />
+      <LinkForm @created="onCreated" @unauthorized="focusToken" />
       <LinkList
         :links="links"
         :loading="loading"

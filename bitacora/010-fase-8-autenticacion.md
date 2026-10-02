@@ -532,3 +532,61 @@ Comprobado por el orquestador: en la CLI, 8 funciones en rojo (las 6 nuevas y la
 - Leído el diff de `main.go` (+32/−3) con la spec al lado: `apiToken` antes de `open`, recorte, los dos mensajes exactos, la sinopsis nueva, y `Handler` recibe el token recortado. La observación sobre la regla 7 es correcta y no hace falta matizar la spec: esos mensajes son de configuración de la CLI, como los que ya había.
 
 **Commit**: `cmd/acorta: serve exige el token de API (verde)`.
+
+## Informe: paso verde (8c)
+
+> `npm test` en `web/`: **59 tests, 59 en verde**. `npm run build` sin errores. Ningún `*.test.js` tocado. Solo `web/`, sin commits ni dependencias nuevas.
+>
+> ### Ficheros tocados
+> - `/home/claude/Projects/acorta/web/src/api.js`: el token vive aquí (`TOKEN_KEY = 'acorta_token'`, `loadToken()`, `saveToken()`; vacío → `removeItem`). `authHeaders()` devuelve `{ Authorization: 'Bearer <token>' }` solo si hay token guardado, y se mezcla en las cabeceras de `createLink` y `deleteLink`; `listLinks` no lo toca. El resultado de cada función pasa a `{ ok, status, data, errors }` (`status = 0` en fallo de conexión).
+> - `/home/claude/Projects/acorta/web/src/components/TokenField.vue`: `<section>` sin `<form>`; `v-model` sobre `loadToken()` al montar; `save()` con Guardar o `@keydown.enter` recorta, guarda y actualiza el campo con el valor recortado; `saved` controla el estado `Token guardado`; `defineExpose({ focus })`. Campo y botón con `min-h-11` (44 px), `flex gap-2`, mismas clases Tailwind que el resto.
+> - `/home/claude/Projects/acorta/web/src/components/LinkForm.vue`: nuevo evento `unauthorized`, emitido cuando `result.status === 401` (el error se muestra como los demás, sin cambios).
+> - `/home/claude/Projects/acorta/web/src/App.vue`: `ref` a `TokenField`, `focusToken()`; lo llama con `@unauthorized` del formulario y con `status === 401` al borrar. El token guardado no se toca.
+>
+> ### Decisiones y por qué
+> 1. **El token se lee en `api.js` en el momento de cada petición**, no se pasa por props. Así guardar en la misma sesión surte efecto sin recargar (test «sin recargar») y `listLinks` no puede enviarlo por accidente. No he creado un `token.js`: la spec 006 fija la estructura de `src/` y el token es la credencial del cliente de la API.
+> 2. **`status` en el resultado** en vez de un `unauthorized: true`: es lo único que permite distinguir el 401 sin reinterpretar los mensajes (spec 001: la web no reescribe errores).
+> 3. **El 401 llega a App por un evento** (`unauthorized`) y App enfoca el campo mediante `defineExpose({ focus })`. Es la vía mínima sin estado compartido ni `document.getElementById`.
+> 4. **Sin reglas de negocio**: no se valida la longitud del token (spec 006).
+> 5. Editar el campo del token después de guardar no quita el estado `Token guardado` (no se exige nada; mínimo).
+>
+> ### Desviaciones de las specs (a revisar)
+> - **Spec 006, estructura**: `api.js` documentado como `fetch → { ok, data, errors }`; ahora devuelve también `status`. Conviene actualizar esa línea de la 006.
+> - **Spec 006, Diseño («los mensajes de estado … están en una región `aria-live="polite"`») vs. tests WEB-04**: con una región `aria-live` persistente (vacía hasta guardar) en `TokenField`, los 3 tests de WEB-04 fallan, porque hacen `w.find('[aria-live="polite"]')` (la **primera** región del documento) y esperan que sea la del formulario; `TokenField` va encima. Lo he comprobado: 3 rojos por `expected '' to contain …`. Como no puedo tocar los tests, la región del token solo existe mientras hay estado (`<p v-if="saved" aria-live="polite">Token guardado</p>`). Cumple la letra de AUT-11 y pasa todos los tests, pero en accesibilidad es un compromiso: un nodo que nace ya con `aria-live` puede no anunciarse (la práctica recomendada es que la región exista antes de que cambie su contenido). Recomendación: cambiar WEB-04 a `findAll('[aria-live="polite"]').find((r) => r.text().includes(e))`, como ya hace el test de AUT-11, y entonces volver a la región persistente. Lo dejo anotado en un comentario del componente.
+> - Ninguna otra: la 008 (AUT-11 a AUT-13) y la 006 se cumplen tal cual.
+>
+> ### Tests tocados
+> Ninguno.
+>
+> ### Bundle (`npm run build`, escribe en `server/static/dist/`, fuera de Git)
+> ```
+> ../server/static/dist/index.html                  0.39 kB │ gzip:  0.26 kB
+> ../server/static/dist/assets/index-Ca7beaVs.css  14.69 kB │ gzip:  3.89 kB
+> ../server/static/dist/assets/index-B_dGrM_V.js   75.50 kB │ gzip: 29.04 kB
+> ✓ built in 79ms
+> ```
+>
+> ### `npm test` (antes y después de la limpieza, mismo resultado)
+> ```
+>  Test Files  1 passed (1)
+>       Tests  59 passed (59)
+>      Duration  554ms
+> ```
+
+## Verificación del orquestador (verde 8c)
+
+- `git diff` sobre los `*.test.js`: vacío. `npm test`: 59 en verde. `npm run build` sin errores.
+- Las dos desviaciones que declara son reales. La primera se cierra en la spec 006 en este mismo commit (`api.js` devuelve también `status`). La segunda es, otra vez, un test que daba por hecho algo que la spec nueva cambia: WEB-04 buscaba la primera región `aria-live` del documento. El agente no tocó el test y dejó la región del token sin persistir, con un comentario, en vez de hacer trampa: es exactamente lo que pide la regla 3. El orquestador corrigió los tres tests en un commit propio (`eab2569`: buscan la región del propio formulario; comprobado que pasan con el código en rojo y en verde, y que los 12 de la 008 seguían en rojo con el código en rojo) y pidió volver a la región persistente.
+- Un tropiezo propio: la primera corrección del test buscaba la región *dentro* del `<form>`, y la de `LinkForm` está al lado, fuera de él. Lo cazaron los tres tests al pasar a rojo antes de confirmar; se corrigió con `--amend` antes de seguir.
+
+**Encargo final del verde (8c)**:
+
+> Bien visto lo de la región. Tenías razón en que los tests de WEB-04 daban por hecho una sola región `aria-live`: los he corregido yo en un commit aparte (`eab2569`, buscan ahora la región del propio formulario), así que ya no hay motivo para el compromiso. Última tarea del **paso verde**, en `web/src/components/TokenField.vue`: haz que la región `aria-live="polite"` del token exista siempre (sin `v-if`), vacía hasta que haya estado y con `Token guardado` cuando lo haya (como hace `LinkForm` con su `empty:hidden`), y quita el comentario que explicaba el compromiso. Nada más. Terminado es `npm test` en verde (59) y `npm run build` sin errores. No toques ningún test. Informe corto: qué has cambiado y la salida resumida de `npm test`.
+
+Informe final del agente:
+
+> **Cambio** (solo `/home/claude/Projects/acorta/web/src/components/TokenField.vue`): la región `<div aria-live="polite" class="empty:hidden mt-2">` existe siempre, como la de `LinkForm`; dentro, `<p v-if="saved">Token guardado</p>` aparece solo cuando hay estado. Quitado el comentario que explicaba el compromiso. Ningún test tocado; sobre `eab2569` los tests de WEB-04 ya no chocan.
+>
+> **`npm test`** en `web/`: 59 passed (59). **`npm run build`**: sin errores (`index-D4ysEhmi.js` 75.54 kB, gzip 29.04 kB; CSS 14.69 kB, gzip 3.89 kB).
+
+**Commit**: `web: token de API en la interfaz (verde)`.
