@@ -82,8 +82,24 @@ const (
 	usageAdd   = "uso: acorta add [-alias ALIAS] [-ttl DURACIÓN] [-db RUTA] [-base-url URL] URL"
 	usageList  = "uso: acorta list [-db RUTA]"
 	usageRm    = "uso: acorta rm [-db RUTA] CÓDIGO"
-	usageServe = "uso: acorta serve [-addr :8080] [-db RUTA] [-base-url URL]"
+	usageServe = "uso: acorta serve [-addr :8080] [-db RUTA] [-base-url URL] [-token TOKEN]"
 )
+
+// validToken es el token de API con el que arrancan serve los tests de esta
+// spec (008, «Verificación»): solo los de la 008 prueban qué pasa sin él.
+const validToken = "token-de-los-tests-005-0123456789"
+
+// withToken da a serve un token válido por ACORTA_TOKEN, sin cambiar los
+// argumentos del test. setup deja getenv sin variables, así que aquí se
+// vuelve al entorno real, con las otras variables de acorta vacías para que
+// el entorno de quien ejecuta los tests no se cuele.
+func withToken(t *testing.T) {
+	t.Helper()
+	env.getenv = os.Getenv
+	t.Setenv("ACORTA_DB", "")
+	t.Setenv("ACORTA_BASE_URL", "")
+	t.Setenv("ACORTA_TOKEN", validToken)
+}
 
 // storedLinks lee los enlaces directamente del almacén.
 func storedLinks(t *testing.T, db string) []link.Link {
@@ -329,6 +345,7 @@ func TestCLI08_RemoveArgumentCount(t *testing.T) {
 // CLI-09: serve abre la base, anuncia la dirección y sirve server.Handler.
 func TestCLI09_Serve(t *testing.T) {
 	f := setup(t)
+	withToken(t)
 	db := dbPath(t)
 	var out bytes.Buffer
 	// El handler se prueba dentro de listen, que es mientras se sirve: al
@@ -378,6 +395,7 @@ func TestCLI09_Serve(t *testing.T) {
 
 func TestCLI09_ServeDefaultAddr(t *testing.T) {
 	f := setup(t)
+	withToken(t)
 	env.listen = func(addr string, h http.Handler) error { f.listenAddr = addr; return nil }
 	expect(t, []string{"serve", "-db", dbPath(t)}, 0, "acorta escuchando en http://localhost:8080\n", "")
 	if f.listenAddr != ":8080" {
@@ -387,6 +405,7 @@ func TestCLI09_ServeDefaultAddr(t *testing.T) {
 
 func TestCLI09_ServeHostInAddr(t *testing.T) {
 	f := setup(t)
+	withToken(t)
 	env.listen = func(addr string, h http.Handler) error { f.listenAddr = addr; return nil }
 	expect(t, []string{"serve", "-db", dbPath(t), "-addr", "127.0.0.1:9000"}, 0, "acorta escuchando en http://127.0.0.1:9000\n", "")
 	if f.listenAddr != "127.0.0.1:9000" {
@@ -396,6 +415,7 @@ func TestCLI09_ServeHostInAddr(t *testing.T) {
 
 func TestCLI09_ServeListenError(t *testing.T) {
 	setup(t)
+	withToken(t)
 	env.listen = func(string, http.Handler) error { return errors.New("address already in use") }
 	code, _, errOut := exec("serve", "-db", dbPath(t))
 	if code != 1 {
@@ -556,6 +576,7 @@ func TestCLI_UnknownFlagIsUsageError(t *testing.T) {
 // CLI-13: una base que no se puede abrir da error y salida 1 en todo subcomando.
 func TestCLI13_CannotOpenDB(t *testing.T) {
 	setup(t)
+	withToken(t) // el caso serve arranca con token válido: aquí se prueba la base, no el token
 	env.listen = func(string, http.Handler) error { t.Error("CLI-13: serve no debe escuchar"); return nil }
 	bad := filepath.Join(t.TempDir(), "no-existe", "acorta.db")
 	for _, args := range [][]string{

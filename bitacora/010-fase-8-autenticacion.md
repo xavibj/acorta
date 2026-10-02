@@ -218,3 +218,247 @@ Comprobado otra vez por el orquestador, contando casos hoja con `go test -json`:
 - La desviación que declara (el repo entero no compila) es la prevista en la spec 007 y se cierra en la 8b.
 
 **Commit**: `server: token de API en crear y borrar (verde)`.
+
+## Encargo: paso rojo (8b, `cmd/acorta`)
+
+> **Qué leer antes.** Trabajas en el repositorio `/home/claude/Projects/acorta`. Antes de escribir nada lee, en este orden: `AGENTS.md`, `specs/001-plan-tecnico.md`, `specs/008-autenticacion.md` entera (sobre todo las secciones «El token», «CLI» y «Contrato del paquete») y `specs/005-cli.md` (la sinopsis de `serve`, la tabla de configuración, los códigos de salida y CLI-09, CLI-10 y CLI-13). Mira el código que vas a tocar: `cmd/acorta/main.go` (en especial `pick`, `options`, `parse` y el subcomando `serve`) y `cmd/acorta/main_test.go` (cómo se prueba `serve` sin abrir sockets, con el `listen` inyectado, y cómo se fijan variables de entorno en los tests). Mira también la firma nueva de `server.Handler` en `server/server.go`: ahora recibe el token como cuarto parámetro, y por eso `cmd/acorta` no compila ahora mismo.
+>
+> **La tarea.** Eres el agente de la fase 8b de `specs/007-fases.md`: la autenticación en la CLI. Este encargo es solo el **paso rojo**:
+>
+> 1. Haz que `cmd/acorta` vuelva a compilar con el mínimo cambio: la llamada a `server.Handler` pasa de momento una cadena vacía como token. Nada más en `main.go` (ni el flag, ni la variable de entorno, ni las comprobaciones: eso es el verde).
+> 2. Escribe los tests de AUT-07 a AUT-10 en `cmd/acorta/main_test.go` (o en un fichero nuevo `cmd/acorta/auth_test.go`, como prefieras), con el estilo de los existentes: contra `run`, con `listen` inyectado, sin procesos ni sockets. Cada test lleva en el nombre de la función el identificador sin guion (`TestAUT07_…`) y, en un comentario justo encima, con guion (`// AUT-07: …`), como ya hacen los tests de este paquete. Cubre: el flag `-token` llega a `server.Handler` (necesitarás una forma de ver qué token recibió `Handler`: mira cómo el test de CLI-09 captura el handler y piensa en comprobarlo con una petición `POST /api/links` con y sin `Authorization` contra ese handler, que es lo que distingue un token de otro); la variable `ACORTA_TOKEN` cuando no hay flag; el flag gana a la variable; sin token (ni flag ni variable, y también con la variable vacía) `error: falta el token de API: usa -token o ACORTA_TOKEN` en `stderr`, salida 1, sin abrir la base de datos ni llamar a `listen`; token de menos de 16 caracteres tras recortar espacios (prueba con 15 y con 16, y con uno de 16 rodeado de espacios, que vale) `error: el token de API debe tener al menos 16 caracteres`, salida 1, sin `listen`; y que el mensaje de arranque de CLI-09 y la ayuda de `serve -h` no contienen el token (la ayuda puede nombrar el flag y la variable).
+> 3. Ejecuta `go test ./cmd/acorta/` y comprueba que los tests nuevos **fallan por las aserciones**, no por errores de compilación ni por pánicos, y que los anteriores siguen en verde.
+>
+> **El método.** Tests de tabla donde haya varios casos. Para «sin abrir la base de datos» usa una ruta de base de datos en un directorio que no existe: si `serve` la abriera, fallaría por CLI-13 con otro mensaje; el test exige el mensaje del token y la salida 1. Fija las variables de entorno con `t.Setenv`. El orden de comprobación que pide la spec es: primero el token (AUT-08, AUT-09), después la base de datos.
+>
+> **Los límites.** Solo puedes crear o modificar ficheros dentro de `cmd/acorta/`. No toques `server/`, `web/`, `go.mod` ni `go.sum`; no ejecutes `go mod tidy`; no añadas dependencias. No hagas commits. No implementes el flag ni las comprobaciones todavía. Si algún caso pasa con el código sin implementar, dilo en el informe.
+>
+> **Terminado es.** `gofmt -l .` vacío, `go vet ./...` limpio en todo el repo (ahora que vuelve a compilar), `go test ./cmd/acorta/` compilando, con los tests anteriores en verde y los de AUT-07 a AUT-10 fallando por las aserciones; el resto de paquetes sigue en verde.
+>
+> **El informe.** Ficheros creados o tocados; cuántos tests o casos nuevos hay y cuántos fallan; una tabla criterio → nombre del test; cualquier ambigüedad o contradicción de la spec 008 o de la 005 (no la resuelvas en silencio: dila); y las últimas líneas de `go test ./cmd/acorta/`.
+
+## Encargo: paso rojo (8c, `web`)
+
+> **Qué leer antes.** Trabajas en el repositorio `/home/claude/Projects/acorta`. Antes de escribir nada lee, en este orden: `AGENTS.md`, `specs/001-plan-tecnico.md` (stack y órdenes de la interfaz), `specs/008-autenticacion.md` entera (sobre todo «Interfaz web», AUT-11 a AUT-13, y «API») y `specs/006-web.md`. Mira el código que vas a tocar: `web/src/api.js`, `web/src/App.vue`, `web/src/components/` y, con calma, `web/src/App.test.js`: cómo se monta la aplicación entera con `fetch` simulado, cómo se nombran los tests (`WEB-01: …`) y cómo se comprueban las peticiones.
+>
+> **La tarea.** Eres el agente de la fase 8c de `specs/007-fases.md`: la autenticación en la interfaz web. Este encargo es solo el **paso rojo**:
+>
+> 1. Crea el componente vacío `web/src/components/TokenField.vue` (un campo **Token de API** `type="password"` con su `<label>` y un botón **Guardar**, sin lógica todavía) y móntalo en `App.vue` encima del formulario de creación, para que los tests puedan encontrarlo. Nada más de implementación: ni `sessionStorage`, ni la cabecera, ni el foco.
+> 2. Escribe los tests de AUT-11, AUT-12 y AUT-13 en `web/src/App.test.js` (o en un fichero nuevo `web/src/auth.test.js` que monte `App` igual), con el mismo estilo y nombrados `AUT-11: …`. Cubre: al pulsar Guardar se guarda en `sessionStorage` bajo `acorta_token` el token recortado y el campo muestra el estado `Token guardado`; al cargar la página con un token ya guardado, el campo aparece relleno y en ese estado; guardar vacío borra la clave; crear (WEB-01) y borrar (WEB-12) envían `Authorization: Bearer <token>` cuando hay token guardado y no envían la cabecera cuando no lo hay; cargar el listado (WEB-08) y Actualizar (WEB-13) no la envían nunca, con o sin token; ante un `401` al crear o al borrar, el error se muestra tal como llega (`{"errors":["falta el token de API"]}` → el texto `falta el token de API`), el campo del token recibe el foco y el token guardado no se borra.
+> 3. Ejecuta `npm test` en `web/` y comprueba que los tests nuevos **fallan por las aserciones**, no por errores de sintaxis, y que los 38 anteriores siguen en verde.
+>
+> **El método.** Vitest con `@vue/test-utils` y el `fetch` simulado que ya usan los tests; `sessionStorage` real de jsdom (límpialo en un `beforeEach`). Para el foco, monta con `attachTo: document.body` y comprueba `document.activeElement`. Para la cabecera, inspecciona los argumentos con los que se llamó a `fetch` (`headers`). Comprueba la ausencia de cabecera, no solo la presencia.
+>
+> **Los límites.** Solo puedes crear o modificar ficheros dentro de `web/`. No toques `server/`, `cmd/`, `go.mod` ni `go.sum`. No añadas dependencias a `web/package.json`. No hagas commits. No implementes todavía. Si algún test pasa con el componente vacío, dilo en el informe. No ejecutes `npm run build` (escribe en `server/static/dist/`, que no está en Git; no hace falta en el rojo).
+>
+> **Terminado es.** `npm test` en `web/` compilando: los 38 tests anteriores en verde y los nuevos fallando por las aserciones.
+>
+> **El informe.** Ficheros creados o tocados; cuántos tests nuevos hay y cuántos fallan; una tabla criterio → nombre del test; cualquier ambigüedad o contradicción de la spec 008 o de la 006 (no la resuelvas en silencio: dila); y las últimas líneas de `npm test`.
+
+## Informe: paso rojo (8b)
+
+> ### Ficheros tocados (solo dentro de `cmd/acorta/`)
+> - `/home/claude/Projects/acorta/cmd/acorta/main.go` — un solo cambio: `server.Handler(svc, base, server.Static(), "")` (línea 289). Nada más: ni flag, ni variable, ni comprobaciones, ni sinopsis.
+> - `/home/claude/Projects/acorta/cmd/acorta/auth_test.go` — **nuevo**, con los tests AUT-07 a AUT-10 y sus ayudantes (`postLinks`, `serveProbe`, `wantServed`, `badDB`).
+>
+> No he tocado `main_test.go`, `server/`, `web/`, `go.mod`, `go.sum`; no he hecho `go mod tidy` ni commits. Ojo: `git status` muestra además `bitacora/010-…`, `web/src/App.vue`, `web/src/App.test.js` y `web/src/components/TokenField.vue` modificados o nuevos; **no son míos** (supongo que son de la fase 8c en paralelo).
+>
+> ### Tests nuevos
+> 6 funciones, 17 casos en total (contando subtests de tabla y bucles). **Fallan los 6 / los 17**, todos por aserciones (no hay errores de compilación ni pánicos). Ningún caso pasa con el código sin implementar. Los 24 tests anteriores siguen en verde; `link`, `server`, `shortener`, `store` en verde; `gofmt -l .` vacío; `go vet ./...` limpio.
+>
+> Cómo se ve qué token recibió `Handler`: dentro del `listen` inyectado (mientras se sirve, antes de que `serve` cierre la base) se hace `POST /api/links` con un alias distinto por sonda, con y sin `Authorization`: `201` = el handler aceptó ese token; `401` = no. Así «solo el flag», «solo la variable» y «el flag gana» se distinguen de verdad (en el último, el token del entorno debe dar 401).
+>
+> | Criterio | Test | Casos |
+> |---|---|---|
+> | AUT-07 (fuente del token y precedencia) | `TestAUT07_TokenSource` | solo flag; solo `ACORTA_TOKEN`; flag gana a variable (3 subtests de tabla) |
+> | AUT-07 (sinopsis con `[-token TOKEN]`) | `TestAUT07_Synopsis` | `serve -h` (stdout) y `serve -nope` (stderr) |
+> | AUT-08 (falta el token) | `TestAUT08_MissingToken` | sin flag ni variable (unset); variable vacía; `-token ""` con variable vacía (3 subtests). Base en directorio inexistente + `listen` que hace `t.Error` |
+> | AUT-09 (longitud mínima 16 tras recortar) | `TestAUT09_TokenLength` | 15 por flag; 15 por variable; 15 rodeado de espacios → error, salida 1, sin listen, base inexistente. 16 por flag; 16 por variable; 16 rodeado de espacios → arranca y el handler acepta el token **recortado** (6 subtests) |
+> | AUT-10 (mensaje de arranque) | `TestAUT10_StartupMessageHidesToken` | con `-token` y con `-addr :9090`; stdout exacto, sin el token del flag ni el del entorno (2 casos) |
+> | AUT-10 (ayuda) | `TestAUT10_HelpHidesToken` | `serve -h` con `ACORTA_TOKEN` definida; `serve -token X -h`: menciona `-token` y `ACORTA_TOKEN`, no contiene ningún token (2 casos) |
+>
+> ### Ambigüedades / avisos sobre las specs (no resueltas en silencio)
+> 1. **Token solo de espacios** (`-token "   "` o `ACORTA_TOKEN="   "`): la spec 005 dice que una variable *vacía* cuenta como no definida, y AUT-08 habla de «variable vacía»; pero AUT-09 cuenta los caracteres *después de recortar*, así que `"   "` → 0 < 16 → mensaje de AUT-09. Leído literalmente es AUT-09, pero podría querer ser AUT-08. No lo he cubierto en ningún test; que lo decida el orquestador.
+> 2. **El verde romperá tests existentes de la spec 005, legítimamente**: `TestCLI09_Serve`, `TestCLI09_ServeDefaultAddr`, `TestCLI09_ServeHostInAddr`, `TestCLI09_ServeListenError` y el caso `serve` de `TestCLI13_CannotOpenDB` arrancan `serve` sin token (pasarán a AUT-08 con salida 1); y la constante `usageServe` de `main_test.go` (usada por `TestCLI12_SubcommandHelp` y `TestCLI_UnknownFlagIsUsageError`) lleva la sinopsis vieja sin `[-token TOKEN]`. La spec 005 ya está actualizada (sinopsis y tabla de configuración), así que en el verde habrá que dar un token a esos tests y actualizar `usageServe`; no es «modificar un test para que pase» sino seguir la spec. No lo he hecho ahora porque el encargo pide que los anteriores sigan en verde en el paso rojo.
+> 3. **AUT-09 y el token recortado**: la spec dice «sin espacios en los extremos (se recortan)», así que he asumido que `Handler` recibe el token recortado y lo compruebo (`Bearer 1234567890123456` da 201 cuando el flag fue `"  1234567890123456  "`). Si la intención fuera solo *contar* tras recortar pero pasar el valor tal cual, ese caso tendría que cambiar.
+> 4. **AUT-09 no dice nada de la base de datos** («no llega a escuchar»), pero según tu indicación (token antes que base) los casos de error usan una base en directorio inexistente y exigen el mensaje del token; la spec 008 solo lo dice explícitamente para AUT-08.
+>
+> ### Últimas líneas de `go test ./cmd/acorta/`
+> ```
+> --- FAIL: TestAUT10_HelpHidesToken (0.00s)
+>     auth_test.go:290: [serve -h]: la ayuda no menciona -token: "uso: acorta serve [-addr :8080] [-db RUTA] [-base-url URL]\n  -addr string\n ..."
+>     auth_test.go:290: [serve -h]: la ayuda no menciona ACORTA_TOKEN: "..."
+>     auth_test.go:286: [serve -token token-del-flag-0123456789 -h]: código=2 stderr="error: flag provided but not defined: -token\nuso: acorta serve [-addr :8080] [-db RUTA] [-base-url URL]\n", quiero 0 y vacío
+>     auth_test.go:290: [serve -token token-del-flag-0123456789 -h]: la ayuda no menciona -token: ""
+>     auth_test.go:290: [serve -token token-del-flag-0123456789 -h]: la ayuda no menciona ACORTA_TOKEN: ""
+> FAIL
+> FAIL	acorta/cmd/acorta	0.028s
+> FAIL
+> ```
+> `go test ./...`: solo falla `acorta/cmd/acorta`; `link`, `server`, `shortener` y `store` → `ok`.
+
+## Informe: paso rojo (8c)
+
+> ### Ficheros creados o tocados (solo dentro de `web/`)
+> - **Creado** `/home/claude/Projects/acorta/web/src/components/TokenField.vue`: `<label for="token">Token de API</label>`, `<input id="token" type="password">` y botón **Guardar** (`type="button"`). Sin lógica.
+> - **Tocado** `/home/claude/Projects/acorta/web/src/App.vue`: importa `TokenField` y lo monta encima de `<LinkForm>`.
+> - **Tocado** `/home/claude/Projects/acorta/web/src/App.test.js`: `sessionStorage.clear()` en el `beforeEach` global, ayudas nuevas (`headerOf`, `authHeaders`, `tokenField`, `saveToken`, `expectTokenFocused`) y un `describe('autenticación')` al final con 18 tests. No hay fichero `auth.test.js`: reutilizo las ayudas existentes (`mockApi`, `field`, `button`, `submit`, `settle`, `mountApp` ya monta con `attachTo: document.body`).
+>
+> No he tocado `server/`, `cmd/`, `go.mod`, `go.sum` ni `package.json`. Ojo: `git status` muestra cambios ajenos en `cmd/acorta/main.go`, `cmd/acorta/auth_test.go` y `bitacora/010-fase-8-autenticacion.md`; no son míos (serán de la fase 8b en paralelo). No he hecho commits ni `npm run build`.
+>
+> ### Resultado: 18 tests nuevos, 10 fallan, 8 pasan
+> Los 38 anteriores siguen en verde (46 = 38 + 8). Los 10 fallos son todos `AssertionError`, ninguno de sintaxis o de montaje.
+>
+> | Criterio | Test | Rojo |
+> |---|---|---|
+> | AUT-11 | `AUT-11: el campo Token de API es type="password", tiene su <label> y va encima del formulario de creación` | pasa (estructural, lo cubre el componente vacío) |
+> | AUT-11 | `AUT-11: al pulsar Guardar guarda el token recortado bajo acorta_token y muestra «Token guardado»` | falla (`expected null to be 'token-de-prueba-123456'`) |
+> | AUT-11 | `AUT-11: al cargar con un token guardado, el campo aparece relleno y en estado «Token guardado»` | falla |
+> | AUT-11 | `AUT-11: al cargar sin token guardado, el campo está vacío y no muestra «Token guardado»` | pasa (trivial sin lógica) |
+> | AUT-11 | `AUT-11: guardar un campo vacío borra el token guardado` / `… solo espacios …` (it.each, 2) | fallan |
+> | AUT-12 | `AUT-12: crear (WEB-01) envía Authorization: Bearer <token guardado>` | falla (`[undefined]` vs `['Bearer …']`) |
+> | AUT-12 | `AUT-12: crear usa el token guardado con Guardar en la misma sesión, sin recargar` | falla |
+> | AUT-12 | `AUT-12: crear sin token guardado no envía la cabecera Authorization` | pasa (hoy nadie envía la cabecera) |
+> | AUT-12 | `AUT-12: tras borrar el token con Guardar vacío, crear ya no envía la cabecera` | pasa (ídem) |
+> | AUT-12 | `AUT-12: borrar (WEB-12) envía Authorization: Bearer <token guardado>` | falla |
+> | AUT-12 | `AUT-12: borrar sin token guardado no envía la cabecera Authorization` | pasa (ídem) |
+> | AUT-12 | `AUT-12: cargar el listado (WEB-08) y Actualizar (WEB-13) no envían Authorization con/sin token guardado` (it.each, 2) | pasan (ídem; son guardas contra regresión) |
+> | AUT-13 | `AUT-13: un 401 al crear sin token muestra «falta el token de API» tal cual y el campo del token recibe el foco` | falla (foco en `<body>`) |
+> | AUT-13 | `AUT-13: un 401 al crear con token guardado muestra el error tal cual, da el foco al token y no lo borra` | falla (foco) |
+> | AUT-13 | `AUT-13: un 401 al borrar muestra el error tal cual, el enlace sigue en el listado, el token recibe el foco y no se borra` | falla (foco) |
+> | AUT-13 | `AUT-13: los demás errores al crear (400) no mueven el foco al campo del token` | pasa (guarda contra regresión) |
+>
+> Cómo se comprueba cada cosa: `sessionStorage` real de jsdom; la cabecera se inspecciona en `fetch.mock.calls[i][1].headers` sin distinguir mayúsculas y aceptando objeto plano o `Headers`; la ausencia se afirma con `toEqual([undefined])` para cada petición, no solo la presencia; el foco con `document.activeElement === input#token`.
+>
+> ### Ambigüedades y decisiones que he tomado en los tests (no están resueltas en la spec; revísalas)
+> 1. **Spec 008, AUT-11**: no dice si al guardar vacío desaparece el estado «Token guardado». He asumido que sí (`not.toContain('Token guardado')` tras borrar). Tampoco dice si «Guardar» con solo espacios cuenta como vacío; por «recortado» he asumido que sí (caso `'   '`).
+> 2. **Spec 006, Diseño** («los mensajes de estado y de error están en una región `aria-live="polite"`») aplicado a «Token guardado»: el test exige que ese texto esté dentro de un `[aria-live="polite"]`. Si el estado se quiere mostrar de otra forma (p. ej. solo visual), hay que decidirlo en la spec.
+> 3. **Spec 008, AUT-13**: el texto de ejemplo es `falta el token de API`; con un token guardado el servidor respondería `token de API incorrecto` (AUT-03). He usado el primero sin token y el segundo con token, ambos «tal como llegan». No se especifica si editar el campo del token tras un 401 debe limpiar el error (WEB-06 habla de los campos del formulario); no lo he testeado.
+> 4. **Spec 006 WEB-04** enumera `400, 409, 503`; el 401 de AUT-13 no está en esa lista, aunque AUT-13 dice «como cualquier otro». Aviso por si se quiere añadir el 401 a WEB-04.
+> 5. **Mínimo de 16 caracteres**: la web no valida (spec 006: sin reglas de negocio), así que no hay test; el token de prueba cumple el mínimo por si en el futuro se decide validar en cliente.
+> 6. **Restricción para el paso verde**: la ayuda `submit()` de los tests hace `wrapper.find('form')` (el primer `<form>` del documento). Si `TokenField` se implementa con un `<form>` (natural para guardar con Enter), romperá los 38 tests de WEB-01 a WEB-07. O se implementa sin `<form>` (botón `type="button"`, como está ahora), o antes se cambia la ayuda a algo más específico. No lo he resuelto porque tocar las ayudas afecta a tests existentes.
+> 7. No se especifica si, tras guardar con espacios, el campo debe mostrar el valor recortado; no lo afirmo.
+>
+> ### Últimas líneas de `npm test` (en `web/`)
+> ```
+>  FAIL  src/App.test.js > autenticación > AUT-13: un 401 al borrar muestra el error tal cual, el enlace sigue en el listado, el token recibe el foco y no se borra
+> AssertionError: el campo Token de API no tiene el foco: expected <body><div data-v-app>…(1)</div></body> to be <input id="token" …(3)></input> // Object.is equality
+>
+>  Test Files  1 failed (1)
+>       Tests  10 failed | 46 passed (56)
+>    Start at  01:06:16
+>    Duration  552ms (environment 44%, tests 36%, transform 13%, import 6%)
+> ```
+
+## Revisión del orquestador (rojos 8b y 8c)
+
+Comprobado de primera mano: cada agente tocó solo sus rutas; `gofmt` y `go vet ./...` limpios (el repo vuelve a compilar); 17 casos nuevos de la CLI en rojo y los 24 anteriores en verde; 10 de los 18 nuevos de la web en rojo y los 38 anteriores en verde. Los ocho de la web que pasan con el componente vacío son los negativos de siempre («no envía la cabecera») y uno estructural; quedan de guardia.
+
+Once ambigüedades entre los dos. Las que cambian la spec:
+
+| # | Hueco | Cómo queda |
+|---|---|---|
+| 8b-1 | Token de solo espacios: ¿AUT-08 o AUT-09? | AUT-08: lo que queda vacío al recortar es «falta el token». AUT-09 es de 1 a 15 |
+| 8b-2 | Los tests de CLI-09 y CLI-13 arrancan `serve` sin token; `usageServe` lleva la sinopsis vieja | Se arreglan en el rojo, no en el verde: token por `t.Setenv`, sinopsis nueva. Escrito en «Verificación» |
+| 8b-3, 8b-4 | ¿`Handler` recibe el token recortado? ¿Token antes que base de datos en AUT-09? | Sí a las dos; ahora lo dice AUT-09 |
+| 8c-1, 8c-7 | Guardar vacío o solo espacios; el campo tras guardar con espacios | Borra la clave y quita el estado; el campo muestra el valor recortado (AUT-11) |
+| 8c-2 | `Token guardado` en la región `aria-live` | Sí (AUT-11) |
+| 8c-4 | WEB-04 no listaba el 401 | Lo lista, y dice que con él el foco va al token |
+| 8c-6 | `TokenField` dentro de un `<form>` rompería `submit()` de los tests | Sin `<form>`; Guardar o Enter en el campo (AUT-11) |
+| 8c-3 | ¿Editar el token tras un 401 limpia el error? | No se exige nada; se queda fuera |
+| 8c-5 | ¿Valida la web los 16 caracteres? | No: sin reglas de negocio en la web (spec 006) |
+
+## Encargo: ajuste del rojo (8b)
+
+> Comprobado de primera mano (solo `cmd/acorta/`, gofmt y vet limpios, los 24 anteriores en verde, los 17 nuevos en rojo por aserciones). He cerrado tus ambigüedades en la spec 008; vuelve a leer AUT-08, AUT-09 y «Verificación»:
+>
+> - Un token que queda vacío después de recortar (`"   "`) es AUT-08 («falta el token»), no AUT-09. AUT-09 es de 1 a 15 caracteres tras recortar.
+> - AUT-09 dice ya que el token se comprueba antes que la base de datos y que `Handler` recibe el token recortado: tus suposiciones 3 y 4 eran correctas y ahora están escritas.
+> - «Verificación»: los tests de la spec 005 que arrancan `serve` lo hacen con un token válido y su sinopsis es la nueva; solo los de la 008 prueban qué pasa sin él. Es decir, tu ambigüedad 2 se resuelve ahora, en el rojo, no en el verde.
+>
+> Sigue siendo el **paso rojo**:
+>
+> 1. Añade a AUT-08 el caso del token solo de espacios, por flag y por variable → `error: falta el token de API: usa -token o ACORTA_TOKEN`, salida 1, sin abrir la base ni `listen`.
+> 2. En `main_test.go`, da un token válido (por `t.Setenv("ACORTA_TOKEN", …)`, que no cambia los argumentos de los tests) a `TestCLI09_Serve`, `TestCLI09_ServeDefaultAddr`, `TestCLI09_ServeHostInAddr`, `TestCLI09_ServeListenError` y al caso `serve` de `TestCLI13_CannotOpenDB`, y actualiza la constante `usageServe` a la sinopsis nueva de la spec 005 (`acorta serve [-addr :8080] [-db RUTA] [-base-url URL] [-token TOKEN]`). Con el código sin implementar, los de CLI-09 y CLI-13 seguirán en verde (la variable se ignora) y los que usan `usageServe` pasarán a rojo: es correcto, porque la sinopsis todavía no existe. Dilo en el recuento.
+> 3. Nada más en `main.go`.
+>
+> Mismos límites: solo `cmd/acorta/`, sin commits. Terminado es `gofmt -l .` vacío, `go vet ./...` limpio y `go test ./cmd/acorta/` compilando, con los fallos que acabo de describir y nada más en rojo.
+>
+> Informe: qué has cambiado, el recuento nuevo (qué tests fallan y por qué) y si queda alguna ambigüedad.
+
+## Encargo: ajuste del rojo (8c)
+
+> Comprobado de primera mano (solo `web/`, 46 en verde y 10 en rojo por aserciones). He cerrado tus ambigüedades en las specs; vuelve a leer AUT-11 de la 008 y WEB-04 de la 006:
+>
+> - AUT-11: Guardar **o Enter dentro del campo** guarda el token recortado; el campo pasa a mostrar el valor recortado; el estado `Token guardado` va en la región `aria-live` (tu suposición 2, correcta); guardar vacío o solo espacios borra la clave y quita el estado (tu suposición 1, correcta); y el campo **no está dentro de un `<form>`**, el formulario de la página es el de creación. Eso resuelve tu aviso 6 sin tocar las ayudas.
+> - WEB-04 incluye ya el `401`, y dice que con él el foco va al campo del token.
+> - Editar el campo del token después de un 401 no limpia el error: no se exige nada, así que no lo testees.
+>
+> Sigue siendo el **paso rojo**: añade los casos que faltan según lo anterior: Enter en el campo guarda igual que el botón; tras guardar `'  token-con-espacios-1234  '`, el campo muestra el valor recortado; y que `TokenField` no contiene ni está dentro de un `<form>`. Nada más de implementación.
+>
+> Mismos límites: solo `web/`, sin commits, sin `npm run build`. Terminado es `npm test` compilando, los 38 anteriores en verde y los nuevos que deban fallar, fallando por aserciones.
+>
+> Informe: qué has cambiado, el recuento nuevo y si queda alguna ambigüedad.
+
+## Informes: ajuste de los rojos (8b y 8c)
+
+8b:
+
+> He releído AUT-08, AUT-09 y «Verificación» de la spec 008 tal como están ahora y he ajustado los tests. Sigue sin haber nada nuevo en `main.go` más allá del `""` de la primera vuelta. Solo `cmd/acorta/`, sin commits.
+>
+> ### Qué he cambiado
+> - `/home/claude/Projects/acorta/cmd/acorta/auth_test.go`
+>   - `TestAUT08_MissingToken`: dos casos nuevos, «flag solo de espacios» (`-token "   "`) y «variable solo de espacios» (`ACORTA_TOKEN="   "`), con el mismo contrato que el resto de la tabla: `error: falta el token de API: usa -token o ACORTA_TOKEN`, salida 1, base en directorio inexistente (si la abriera fallaría por CLI-13 con otro mensaje) y `listen` que hace `t.Error`. La tabla ahora lleva un campo `env` para el valor de la variable.
+>   - Comentarios de AUT-08 y AUT-09 alineados con la redacción nueva («queda vacío tras recortar», «entre 1 y 15», «antes que la base de datos»). Las aserciones de AUT-09 no cambian: ya comprobaban la base inexistente y el token recortado en el handler, que ahora están escritos en la spec.
+> - `/home/claude/Projects/acorta/cmd/acorta/main_test.go`
+>   - `usageServe` → `uso: acorta serve [-addr :8080] [-db RUTA] [-base-url URL] [-token TOKEN]`.
+>   - Nuevo `const validToken` y ayudante `withToken(t)`: pone `env.getenv = os.Getenv` (necesario: `setup` deja un `getenv` que siempre devuelve `""`, así que `t.Setenv` solo no llegaría a `run`), vacía `ACORTA_DB` y `ACORTA_BASE_URL` con `t.Setenv` para que no se cuele el entorno de quien ejecuta, y fija `ACORTA_TOKEN=validToken`. Los argumentos de los tests no cambian.
+>   - `withToken(t)` añadido tras `setup(t)` en `TestCLI09_Serve`, `TestCLI09_ServeDefaultAddr`, `TestCLI09_ServeHostInAddr`, `TestCLI09_ServeListenError` y `TestCLI13_CannotOpenDB` (este último con un comentario: el caso `serve` arranca con token válido porque ahí se prueba la base, no el token).
+>
+> ### Recuento
+> `gofmt -l .` vacío; `go vet ./...` limpio; `go test ./cmd/acorta/` compila; `link`, `server`, `shortener`, `store` en `ok`.
+>
+> En `cmd/acorta`: 30 funciones de test, **8 en rojo, 22 en verde**. Todo lo rojo es por aserciones; ni pánicos ni errores de compilación.
+>
+> | Test | Estado | Por qué |
+> |---|---|---|
+> | `TestAUT07_TokenSource` (3 subtests) | rojo | `-token` no existe (flag desconocido, salida 2); con variable, el handler recibe `""` y responde 401 al token |
+> | `TestAUT07_Synopsis` | rojo | la sinopsis aún no lleva `[-token TOKEN]` |
+> | `TestAUT08_MissingToken` (5 subtests, 2 nuevos) | rojo | sin flag abre la base y falla por CLI-13 con otro mensaje; con `-token` es flag desconocido (2) |
+> | `TestAUT09_TokenLength` (6 subtests) | rojo | ídem; los casos de 16 fallan además porque el handler no acepta el token |
+> | `TestAUT10_StartupMessageHidesToken` | rojo | `-token` desconocido |
+> | `TestAUT10_HelpHidesToken` | rojo | la ayuda no menciona `-token` ni `ACORTA_TOKEN`; con `-token X -h` sale 2 |
+> | `TestCLI12_SubcommandHelp` | rojo (**nuevo en rojo**) | `serve -h` no empieza por la sinopsis nueva de `usageServe` |
+> | `TestCLI_UnknownFlagIsUsageError` | rojo (**nuevo en rojo**) | el uso de `serve -nope` no es la sinopsis nueva |
+> | `TestCLI09_Serve`, `…DefaultAddr`, `…HostInAddr`, `…ListenError`, `TestCLI13_CannotOpenDB` | verde | la variable `ACORTA_TOKEN` se ignora con el código actual, como previste |
+> | Resto de la 005 (CLI-01 a CLI-11, CLI-12 `Help` y `UnknownSubcommand`) | verde | sin cambios |
+>
+> Casos nuevos de la 008 en total: 19 (17 + 2), todos en rojo.
+>
+> ### Ambigüedades pendientes
+> Ninguna de las cuatro queda abierta con la redacción nueva. Un solo aviso para el verde, no una ambigüedad: `withToken` vuelve a `os.Getenv` en cinco tests que antes tenían el entorno aislado; lo he blindado vaciando `ACORTA_DB` y `ACORTA_BASE_URL`, así que no debería cambiar nada aunque quien ejecute tenga esas variables definidas.
+
+8c:
+
+> ### Qué he cambiado
+> Solo `/home/claude/Projects/acorta/web/src/App.test.js` (tres tests nuevos en el `describe('autenticación')`, después del test de «al pulsar Guardar»). Sin tocar `TokenField.vue`, `App.vue` ni nada fuera de `web/`; sin commits ni `npm run build`.
+>
+> | Criterio | Test | Estado |
+> |---|---|---|
+> | AUT-11 | `AUT-11: Enter dentro del campo guarda el token igual que el botón Guardar` | falla (`expected null to be 'token-de-prueba-123456'`) |
+> | AUT-11 | `AUT-11: tras guardar, el campo pasa a mostrar el valor recortado` | falla (guarda `'  token-con-espacios-1234  '`, espera clave y campo con `token-con-espacios-1234`) |
+> | AUT-11 | `AUT-11: el campo del token no contiene ni está dentro de un <form>; el único formulario es el de creación` | pasa con el componente vacío (ya es un `<section>` con botón `type="button"`); es una guarda: comprueba `closest('form')` nulo para el campo y para Guardar, que solo hay un `<form>` y que su `submit` es «Acortar» |
+>
+> Detalle del test de Enter: dispara `keydown` y `keyup` con `{ key: 'Enter' }` sobre el input (sin `<form>` no hay evento `submit`), así que la implementación puede escuchar cualquiera de los dos.
+>
+> ### Recuento nuevo
+> `npm test` en `web/`: **59 tests, 47 en verde, 12 en rojo**. Los 38 anteriores (WEB-01 a WEB-14) siguen en verde. De los 21 nuevos (AUT-11 a AUT-13), 12 fallan, todos por `AssertionError` (ninguno de sintaxis ni de montaje), y 9 pasan con el componente vacío: los estructurales (type=password con label y posición; sin `<form>`), los triviales sin lógica (campo vacío al cargar sin token) y las guardas de ausencia de cabecera (crear/borrar sin token, listado y Actualizar con y sin token, 400 no mueve el foco).
+>
+> ### Ambigüedades
+> Con las specs actualizadas (AUT-11 de la 008, WEB-04 de la 006) ya no queda ninguna que afecte a lo testeado. Dos notas menores, no bloqueantes:
+> - El test de Enter no prescribe `keydown` frente a `keyup`; si la implementación quiere `keydown.enter` (lo habitual en Vue), encaja.
+> - Sigue sin especificarse si editar el campo del token tras guardar debe quitar el estado «Token guardado» hasta volver a guardar; no lo testeo, como indicaste para el caso del 401.
+
+Comprobado por el orquestador: en la CLI, 8 funciones en rojo (las 6 nuevas y las 2 de la sinopsis) y 22 en verde; en la web, 12 en rojo y 47 en verde, ninguno de la spec 006 entre los rojos.
+
+**Commits**: `Spec 008 y 006: huecos que destaparon los pasos rojos de la CLI y la web`, `web: tests de la spec 008 (rojo)` y `cmd/acorta: tests de la spec 008 (rojo)`.

@@ -286,7 +286,7 @@ func cmdServe(args []string, stdout, stderr io.Writer) int {
 	defer st.Close()
 
 	base := strings.TrimRight(pick(o.baseURL, "ACORTA_BASE_URL", defaultBaseURL), "/")
-	h := server.Handler(svc, base, server.Static())
+	h := server.Handler(svc, base, server.Static(), "")
 	fmt.Fprintf(stdout, "acorta escuchando en %s\n", listenURL(o.addr))
 	if err := env.listen(o.addr, h); err != nil {
 		return fail(stderr, err)
