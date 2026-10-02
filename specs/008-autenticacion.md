@@ -33,8 +33,8 @@ El `405` de API-12 no cambia: el método se comprueba antes que el token, así q
 ## CLI
 
 - **AUT-07** — `acorta serve -token TOKEN` arranca con ese token; sin flag, usa `ACORTA_TOKEN`; el flag gana a la variable. La sinopsis pasa a ser `acorta serve [-addr :8080] [-db RUTA] [-base-url URL] [-token TOKEN]`.
-- **AUT-08** — `acorta serve` sin token (ni flag ni variable, o una variable vacía) escribe `error: falta el token de API: usa -token o ACORTA_TOKEN` en `stderr`, sale con 1 y no llega a abrir la base de datos ni a escuchar.
-- **AUT-09** — Un token de menos de 16 caracteres (contados después de recortar espacios) escribe `error: el token de API debe tener al menos 16 caracteres`, sale con 1 y no llega a escuchar.
+- **AUT-08** — `acorta serve` sin token (ni flag ni variable, o un valor que queda vacío después de recortar espacios) escribe `error: falta el token de API: usa -token o ACORTA_TOKEN` en `stderr`, sale con 1 y no llega a abrir la base de datos ni a escuchar.
+- **AUT-09** — Un token de entre 1 y 15 caracteres (contados después de recortar espacios) escribe `error: el token de API debe tener al menos 16 caracteres`, sale con 1 y, como AUT-08, no llega a abrir la base de datos ni a escuchar. El token se comprueba antes que la base de datos. `Handler` recibe el token ya recortado.
 - **AUT-10** — El mensaje de arranque de CLI-09 no cambia y no contiene el token. Tampoco aparece en la ayuda de `serve -h` más allá del nombre del flag y de la variable.
 
 `add`, `list` y `rm` no cambian: trabajan sobre la base de datos directamente, con el servidor parado o en marcha, y no necesitan token.
@@ -43,7 +43,7 @@ El `405` de API-12 no cambia: el método se comprueba antes que el token, así q
 
 La pantalla gana un campo **Token de API** (`type="password"`, con su `<label>`) y un botón **Guardar**, encima del formulario de creación.
 
-- **AUT-11** — Al pulsar Guardar, el token (recortado) se guarda en `sessionStorage` con la clave `acorta_token` y el campo muestra el estado `Token guardado`. Al cargar la página, si hay un token guardado, el campo aparece relleno con él y en ese estado. Guardar un campo vacío borra el token guardado.
+- **AUT-11** — Al pulsar Guardar (o Enter dentro del campo), el token recortado se guarda en `sessionStorage` con la clave `acorta_token`, el campo pasa a mostrar el valor recortado y aparece el estado `Token guardado`, en la región `aria-live` de la spec 006. Al cargar la página, si hay un token guardado, el campo aparece relleno con él y en ese estado. Guardar un campo vacío, o que queda vacío al recortar, borra la clave y quita el estado. El campo no está dentro de un `<form>`: el formulario de la página es el de creación.
 - **AUT-12** — Crear (WEB-01) y borrar (WEB-12) envían `Authorization: Bearer <token guardado>`. Sin token guardado no envían la cabecera. Cargar el listado (WEB-08, WEB-13) no la envía nunca.
 - **AUT-13** — Si crear o borrar reciben un `401`, el error se muestra como cualquier otro de la API (WEB-04, WEB-12: tal como llega) y además el campo del token recibe el foco. No se borra el token guardado: puede ser una errata.
 
@@ -60,6 +60,6 @@ func Handler(svc Service, baseURL string, static fs.FS, token string) http.Handl
 ## Verificación
 
 - AUT-01 a AUT-06: tests de `server` con `httptest`, como la spec 004. Los tests de la spec 004 que crean o borran envían el token correcto (AUT-04: con él, todo sigue igual); los de la spec 008 son los únicos que controlan la cabecera.
-- AUT-07 a AUT-10: tests de `cmd/acorta` contra `run`, como la spec 005.
+- AUT-07 a AUT-10: tests de `cmd/acorta` contra `run`, como la spec 005. Los tests de la spec 005 que arrancan `serve` lo hacen con un token válido, y su sinopsis es la nueva; solo los de la spec 008 prueban qué pasa sin él.
 - AUT-11 a AUT-13: tests de componentes en `web/`, como la spec 006, con `sessionStorage` real de jsdom.
 - Antes de cerrar, el orquestador comprueba con `curl` contra el binario: `POST` sin token (401), con token malo (401), con token bueno (201); `DELETE` igual; `GET /api/links` sin token (200); `serve` sin token (salida 1); y en el navegador, guardar el token, crear y borrar.
