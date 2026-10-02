@@ -13,6 +13,7 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode/utf8"
 
 	"acorta/link"
 	"acorta/server"
@@ -46,7 +47,7 @@ func main() {
 
 // Sinopsis de cada subcomando, tal como las da la spec 005.
 const (
-	synopsisServe = "acorta serve [-addr :8080] [-db RUTA] [-base-url URL]"
+	synopsisServe = "acorta serve [-addr :8080] [-db RUTA] [-base-url URL] [-token TOKEN]"
 	synopsisAdd   = "acorta add [-alias ALIAS] [-ttl DURACIÓN] [-db RUTA] [-base-url URL] URL"
 	synopsisList  = "acorta list [-db RUTA]"
 	synopsisRm    = "acorta rm [-db RUTA] CÓDIGO"
@@ -56,6 +57,8 @@ const (
 	defaultDB      = "acorta.db"
 	defaultBaseURL = "http://localhost:8080"
 	defaultAddr    = ":8080"
+	// minTokenLen es la longitud mínima del token de API (spec 008).
+	minTokenLen = 16
 )
 
 // helpText es la ayuda general.
@@ -100,7 +103,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 // options son los flags comunes a los subcomandos.
 type options struct {
-	db, baseURL, addr, alias, ttl string
+	db, baseURL, addr, alias, ttl, token string
 }
 
 // parse analiza los flags de un subcomando. Devuelve (código, true) si hay
@@ -276,8 +279,14 @@ func cmdServe(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.addr, "addr", defaultAddr, "dirección de escucha")
 	fs.StringVar(&o.db, "db", "", "fichero de la base de datos (ACORTA_DB; por defecto "+defaultDB+")")
 	fs.StringVar(&o.baseURL, "base-url", "", "URL base de las URL cortas (ACORTA_BASE_URL; por defecto "+defaultBaseURL+")")
+	fs.StringVar(&o.token, "token", "", fmt.Sprintf("token de API, al menos %d caracteres (ACORTA_TOKEN; obligatorio)", minTokenLen))
 	if code, done := parse("serve", synopsisServe, fs, args, 0, stdout, stderr); done {
 		return code
+	}
+	// El token se comprueba antes de abrir la base de datos (spec 008).
+	token, ok := apiToken(o.token, stderr)
+	if !ok {
+		return 1
 	}
 	st, svc, ok := open(pick(o.db, "ACORTA_DB", defaultDB), stderr)
 	if !ok {
@@ -286,12 +295,29 @@ func cmdServe(args []string, stdout, stderr io.Writer) int {
 	defer st.Close()
 
 	base := strings.TrimRight(pick(o.baseURL, "ACORTA_BASE_URL", defaultBaseURL), "/")
-	h := server.Handler(svc, base, server.Static(), "")
+	h := server.Handler(svc, base, server.Static(), token)
 	fmt.Fprintf(stdout, "acorta escuchando en %s\n", listenURL(o.addr))
 	if err := env.listen(o.addr, h); err != nil {
 		return fail(stderr, err)
 	}
 	return 0
+}
+
+// apiToken resuelve el token de API de serve (flag > ACORTA_TOKEN), recortado.
+// Vacío tras recortar cuenta como no definido (AUT-08); de 1 a 15
+// caracteres es demasiado corto (AUT-09). En caso de error ya lo ha escrito
+// y devuelve ok=false. El token nunca se escribe en ninguna salida.
+func apiToken(flagVal string, stderr io.Writer) (token string, ok bool) {
+	token = strings.TrimSpace(pick(flagVal, "ACORTA_TOKEN", ""))
+	if token == "" {
+		fmt.Fprintln(stderr, "error: falta el token de API: usa -token o ACORTA_TOKEN")
+		return "", false
+	}
+	if utf8.RuneCountInString(token) < minTokenLen {
+		fmt.Fprintf(stderr, "error: el token de API debe tener al menos %d caracteres\n", minTokenLen)
+		return "", false
+	}
+	return token, true
 }
 
 // listenURL convierte una dirección de escucha en la URL que se anuncia:

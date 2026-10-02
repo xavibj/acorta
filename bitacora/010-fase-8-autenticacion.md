@@ -462,3 +462,73 @@ Once ambigüedades entre los dos. Las que cambian la spec:
 Comprobado por el orquestador: en la CLI, 8 funciones en rojo (las 6 nuevas y las 2 de la sinopsis) y 22 en verde; en la web, 12 en rojo y 47 en verde, ninguno de la spec 006 entre los rojos.
 
 **Commits**: `Spec 008 y 006: huecos que destaparon los pasos rojos de la CLI y la web`, `web: tests de la spec 008 (rojo)` y `cmd/acorta: tests de la spec 008 (rojo)`.
+
+## Encargo: paso verde (8b)
+
+> Los tests del paso rojo ya están en un commit. Ahora, el **paso verde** de la fase 8b: implementa en `cmd/acorta/main.go` el token de `serve` hasta que pase `go test ./cmd/acorta/`.
+>
+> **El método.** Lo mínimo que haga pasar los tests y cumpla las specs 008 y 005; nada que no pidan. Flag `-token` solo en `serve`, con `ACORTA_TOKEN` y la misma precedencia que `-db` y `-base-url` (`pick`). El valor se recorta; vacío → `error: falta el token de API: usa -token o ACORTA_TOKEN`, salida 1; de 1 a 15 caracteres → `error: el token de API debe tener al menos 16 caracteres`, salida 1; las dos comprobaciones antes de abrir la base de datos y sin llamar a `listen`. `server.Handler` recibe el token recortado. La sinopsis y la ayuda de `serve` llevan `[-token TOKEN]` y nombran la variable, sin imprimir nunca el valor; el mensaje de arranque no cambia. **No modifiques ningún `_test.go`**: si crees que un test está mal o contradice la spec, párate y dilo en el informe en vez de cambiarlo. Cuando esté en verde, repasa el código y límpialo sin cambiar el comportamiento, con los tests en verde antes y después.
+>
+> **Los límites.** Solo `cmd/acorta/`. Solo la biblioteca estándar. Sin commits. No toques `server/`, `web/`, `go.mod` ni `go.sum`.
+>
+> **Terminado es.** `gofmt -l .` vacío, `go vet ./...` limpio y `go test ./...` en verde en todo el repo.
+>
+> **El informe.** Ficheros tocados; decisiones que has tomado y por qué; desviaciones de **cualquier** spec, también del plan técnico (`specs/001`), aunque te parezcan justificadas; si has tocado algún test (no deberías); y la salida resumida de `go test ./...`.
+
+## Encargo: paso verde (8c)
+
+> Los tests del paso rojo ya están en un commit. Ahora, el **paso verde** de la fase 8c: implementa en `web/` el token hasta que pase `npm test`.
+>
+> **El método.** Lo mínimo que haga pasar los tests y cumpla las specs 008 y 006; nada que no pidan. `TokenField.vue` sin `<form>`: Guardar o Enter en el campo guardan el token recortado en `sessionStorage` (`acorta_token`), el campo pasa a mostrar el valor recortado y el estado `Token guardado` va en la región `aria-live`; vacío borra la clave y quita el estado; al montar, lee la clave. `api.js` añade `Authorization: Bearer <token>` solo en crear y borrar, y solo si hay token guardado; listar no la envía nunca. Ante un `401` en crear o borrar, el error se muestra como los demás y el campo del token recibe el foco, sin borrar el token guardado. Sin reglas de negocio en la web (no valida los 16 caracteres). Mobile first y los 44 px de alto de la spec 006 para el campo y el botón; mismo estilo (Tailwind) que el resto. **No modifiques ningún `*.test.js`**: si crees que un test está mal o contradice la spec, párate y dilo en el informe en vez de cambiarlo. Cuando esté en verde, repasa y limpia sin cambiar el comportamiento, con los tests en verde antes y después.
+>
+> **Los límites.** Solo `web/`. Sin dependencias nuevas en `package.json`. Sin commits. No toques `server/`, `cmd/`, `go.mod` ni `go.sum`. Puedes ejecutar `npm run build` al final para comprobar que compila (escribe en `server/static/dist/`, que no está en Git).
+>
+> **Terminado es.** `npm test` en verde (59 tests) y `npm run build` sin errores.
+>
+> **El informe.** Ficheros tocados; decisiones que has tomado y por qué; desviaciones de **cualquier** spec aunque te parezcan justificadas; si has tocado algún test (no deberías); el tamaño del bundle que da el build; y la salida resumida de `npm test`.
+
+## Informe: paso verde (8b)
+
+> ### Ficheros tocados
+> - `/home/claude/Projects/acorta/cmd/acorta/main.go` — único fichero mío (+32/−3). **Ningún `_test.go` tocado**; `server/`, `web/`, `go.mod`, `go.sum` intactos; sin commits. `git status` muestra además `bitacora/010-fase-8-autenticacion.md` modificado: no es mío.
+>
+> ### Qué hay en `main.go`
+> - `synopsisServe` → `acorta serve [-addr :8080] [-db RUTA] [-base-url URL] [-token TOKEN]` (y con ella `helpText`, que la reutiliza).
+> - Constante `minTokenLen = 16` junto a los demás valores por defecto.
+> - `options` gana el campo `token`.
+> - `cmdServe`: flag `-token` (solo en `serve`) con ayuda `token de API, al menos 16 caracteres (ACORTA_TOKEN; obligatorio)`; tras `parse` y **antes de `open`**, `apiToken(o.token, stderr)`; `server.Handler(svc, base, server.Static(), token)`.
+> - Nueva función `apiToken(flagVal, stderr) (token string, ok bool)`, con el mismo contrato que `open` («en caso de error ya lo ha escrito y devuelve ok=false»): `strings.TrimSpace(pick(flagVal, "ACORTA_TOKEN", ""))`; vacío → `error: falta el token de API: usa -token o ACORTA_TOKEN`; menos de `minTokenLen` → `error: el token de API debe tener al menos 16 caracteres`; devuelve el token recortado. El mensaje de arranque no cambia y el token no se escribe en ninguna salida.
+> - Import nuevo: `unicode/utf8` (biblioteca estándar).
+>
+> ### Decisiones y por qué
+> 1. **Precedencia con `pick`, como `-db` y `-base-url`**: flag > `ACORTA_TOKEN` > sin valor por defecto (`""`). Consecuencia: `-token ""` cae a la variable (coherente con «un valor vacío cuenta como no definido»), y `-token "   "` gana a la variable aunque esta sea válida y acaba en AUT-08 (el flag se dio, se recorta y queda vacío). Lo segundo es lo que exige el test «flag solo de espacios» y la redacción nueva de AUT-08.
+> 2. **Recorte antes de las dos comprobaciones**, y es el valor recortado el que llega a `Handler` (AUT-09, y el test «16 rodeado de espacios» lo comprueba por el 201).
+> 3. **Longitud en caracteres, no en bytes** (`utf8.RuneCountInString`): la spec dice «caracteres», y en este repo ya se cuenta así (`checkAlias` en `link`). Ningún test lo distingue (todos son ASCII); un token de 16 caracteres con acentos pasa, uno de 15 no.
+> 4. **Primero `apiToken`, luego `open`**: los tests de AUT-08/AUT-09 lo exigen con la base en un directorio inexistente; es el orden de la spec.
+> 5. **Refactor tras el verde**: la comprobación estaba inline en `cmdServe`; la saqué a `apiToken` para que `cmdServe` siga leyéndose como una secuencia (`parse` → token → `open` → `Handler` → `listen`) y para no tener el 16 dos veces (ayuda del flag y mensaje salen de `minTokenLen`). Tests en verde antes y después.
+> 6. **No añado el token a `fakeEnv` ni a nada de `environment`**: la inyección existente (`getenv`, `listen`) bastaba.
+>
+> ### Desviaciones de las specs
+> - Ninguna que yo vea respecto a 008 y 005. Una observación sobre `AGENTS.md` regla 7 / spec 001 («los mensajes de error de validación salen solo del paquete `link`»): los dos mensajes del token salen de `cmd/acorta`. Lo considero conforme, porque la spec 008 los define como errores de **configuración de la CLI** (AUT-08, AUT-09), no de validación de enlaces, igual que `ttl: debe ser una duración positiva` o `enlace no encontrado` ya viven en `main.go`; lo digo por si el orquestador quiere matizarlo en la 001.
+> - No he actualizado ninguna spec: el código no contradice ninguna.
+>
+> ### Comprobación manual rápida (sin sockets)
+> `go run ./cmd/acorta serve -h` muestra la sinopsis nueva y el flag `-token` con `ACORTA_TOKEN`, sin valor alguno; `ACORTA_TOKEN="   " … serve` → `falta el token`, salida 1; `serve -token "  corto  "` → `al menos 16 caracteres`, salida 1.
+>
+> ### Suite
+> `gofmt -l .` vacío; `go vet ./...` limpio.
+> ```
+> ok  	acorta/cmd/acorta	0.033s
+> ok  	acorta/link	(cached)
+> ok  	acorta/server	(cached)
+> ok  	acorta/shortener	(cached)
+> ok  	acorta/store	(cached)
+> ```
+> En `cmd/acorta`: 30 funciones de test, todas en verde, incluidos los 19 casos de AUT-07 a AUT-10 y los dos de CLI-12 / flag desconocido que estaban en rojo por la sinopsis.
+
+## Verificación del orquestador (verde 8b)
+
+- `git diff` sobre los `_test.go`: vacío. `gofmt` y `go vet ./...` limpios; `go test -count=1 ./...` en verde en los cinco paquetes.
+- Leído el diff de `main.go` (+32/−3) con la spec al lado: `apiToken` antes de `open`, recorte, los dos mensajes exactos, la sinopsis nueva, y `Handler` recibe el token recortado. La observación sobre la regla 7 es correcta y no hace falta matizar la spec: esos mensajes son de configuración de la CLI, como los que ya había.
+
+**Commit**: `cmd/acorta: serve exige el token de API (verde)`.
