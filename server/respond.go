@@ -39,6 +39,13 @@ func writeErrors(w http.ResponseWriter, r *http.Request, status int, msgs ...str
 	}{msgs})
 }
 
+// writeUnauthorized responde 401 en JSON con el WWW-Authenticate que pide
+// la spec 008.
+func writeUnauthorized(w http.ResponseWriter, r *http.Request, msg string) {
+	w.Header().Set("WWW-Authenticate", "Bearer")
+	writeErrors(w, r, http.StatusUnauthorized, msg)
+}
+
 // writeInternal registra el detalle en el log y responde sin él.
 func writeInternal(w http.ResponseWriter, r *http.Request, err error, asJSON bool) {
 	log.Printf("server: %s %s: %v", r.Method, r.URL.Path, err)

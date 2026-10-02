@@ -46,6 +46,7 @@ type server struct {
 	svc     Service
 	baseURL string // sin barra final
 	static  fs.FS
+	token   string // token de API (spec 008); nunca se escribe en el log
 }
 
 // Handler devuelve el servidor completo. baseURL se usa para short_url;
@@ -53,9 +54,7 @@ type server struct {
 // token es el token de API que exigen POST /api/links y
 // DELETE /api/links/{código} (spec 008).
 func Handler(svc Service, baseURL string, static fs.FS, token string) http.Handler {
-	// TODO(8a): la comprobación del token aún no está implementada.
-	_ = token
-	return &server{svc: svc, baseURL: strings.TrimRight(baseURL, "/"), static: static}
+	return &server{svc: svc, baseURL: strings.TrimRight(baseURL, "/"), static: static, token: token}
 }
 
 // ServeHTTP reparte a mano en vez de usar http.ServeMux: el mux responde

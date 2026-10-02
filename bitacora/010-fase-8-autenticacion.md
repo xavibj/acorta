@@ -164,3 +164,57 @@ De las ambigüedades:
 Comprobado otra vez por el orquestador, contando casos hoja con `go test -json`: 44 casos de `auth_test.go`, 27 en rojo y 17 en verde (el agente cuenta funciones y subtests juntos, de ahí sus 30 y 19); los 26 de las specs 004 en verde; `git diff` de `api_test.go` y `static_test.go` se reduce al cuarto parámetro de `Handler`.
 
 **Commits**: `Spec 008: la cabecera no se recorta, y quién envía el token en los tests` y `server: tests de la spec 008 (rojo)`.
+
+## Encargo: paso verde (8a)
+
+> Los tests del paso rojo ya están en un commit. Ahora, el **paso verde** de la fase 8a: implementa la comprobación del token en `server/` hasta que pase `go test ./server/`.
+>
+> **El método.** Lo mínimo que haga pasar los tests y cumpla la spec 008; nada que la spec no pida. El orden de comprobaciones es el de la spec: método (405 de API-12) antes que token, y token antes de leer el cuerpo (AUT-05). Comparación en tiempo constante con `crypto/subtle` (biblioteca estándar). El esquema `Bearer` sin distinguir mayúsculas; el token exacto, sin recortar (AUT-03). Las rutas públicas no miran la cabecera (AUT-06). Las respuestas 401 son JSON como el resto de la API (`respond.go`) y llevan `WWW-Authenticate: Bearer`. El token no se escribe en el log. **No modifiques ningún `_test.go`**: si crees que un test está mal o contradice la spec, párate y dilo en el informe en vez de cambiarlo. Cuando esté en verde, repasa el código y límpialo (nombres, duplicación, comentarios en español que expliquen el porqué) sin cambiar el comportamiento, con los tests en verde antes y después.
+>
+> **Los límites.** Solo `server/`. Solo la biblioteca estándar. Sin commits. No toques `cmd/` (sigue sin compilar hasta la 8b), `web/`, `go.mod` ni `go.sum`.
+>
+> **Terminado es.** `gofmt -l .` vacío, `go vet ./server/` limpio y `go test ./server/` en verde; `go test ./link/ ./store/ ./shortener/` siguen en verde.
+>
+> **El informe.** Ficheros tocados; decisiones que has tomado y por qué; desviaciones de **cualquier** spec, también del plan técnico (`specs/001`), aunque te parezcan justificadas; si has tocado algún test (no deberías); y la salida resumida de `go test ./server/`.
+
+## Informe: paso verde (8a)
+
+> `go test ./server/` en verde (135 entradas PASS, 0 FAIL, con `-count=1`); `go test ./link/ ./store/ ./shortener/` en verde; `gofmt -l .` vacío; `go vet ./server/` limpio. Ningún `_test.go` tocado. Sin commits, solo biblioteca estándar, solo `server/`.
+>
+> Nota: `git status` muestra también `bitacora/010-fase-8-autenticacion.md` modificada; no es mío (no he tocado nada fuera de `server/`).
+>
+> ### Ficheros tocados (`/home/claude/Projects/acorta/server/`)
+> - `auth.go` — **nuevo**. `(*server).authorized(w, r) bool`: lee `Authorization`; vacía → 401 «falta el token de API»; si no, `strings.Cut(auth, " ")` separa esquema y token, y si el esquema no es `Bearer` (`strings.EqualFold`, sin distinguir mayúsculas) o el token no coincide → 401 «token de API incorrecto». `(*server).tokenMatches(got)`: `subtle.ConstantTimeCompare` y, además, `s.token != ""`.
+> - `respond.go` — `writeUnauthorized(w, r, msg)`: pone `WWW-Authenticate: Bearer` y delega en `writeErrors` con 401 (JSON, `\n` final, como el resto de la API).
+> - `api.go` — `POST /api/links`: `authorized` antes de `createLink` (antes de leer el cuerpo). `DELETE /api/links/{código}`: `methodNotAllowed(...) || !s.authorized(...)` antes de `deleteLink`, con comentario del orden (405 antes que token, token antes que buscar el código).
+> - `server.go` — campo `token` en `server`, `Handler` lo guarda; fuera el `TODO(8a)`.
+>
+> ### Decisiones y por qué
+> 1. **Sin recortar nada en la cabecera.** `Cut` por el primer espacio: `Bearer` solo → token vacío; `Bearer ` → token vacío; `Bearer  x` → token ` x`; `Bearer x ` → token `x `. Todos incorrectos, como manda AUT-03 tras tu cambio.
+> 2. **Token del servidor vacío no acepta nada.** `subtle.ConstantTimeCompare` devuelve 1 con dos cadenas vacías, así que `Bearer ` (vacío detrás) habría pasado con `Handler(..., "")`. El guard `s.token != ""` cumple el párrafo de «Contrato del paquete» (sin cabecera → «falta…», con `Bearer` y lo que sea → «incorrecto»). Está comentado en el código. No tiene test, como dice la spec.
+> 3. **Tiempo constante sobre longitudes distintas.** `ConstantTimeCompare` devuelve 0 de inmediato si las longitudes difieren, así que filtra la longitud del token, no su contenido. Es lo que pide la spec («`crypto/subtle`») y el uso estándar; ocultar también la longitud (hash SHA-256 de ambos antes de comparar) sería añadir algo que la spec no pide. Lo apunto por si se quiere endurecer la spec.
+> 4. **Solo la primera cabecera `Authorization`.** `r.Header.Get` devuelve la primera si hay varias. La spec no contempla el caso; es el comportamiento habitual.
+> 5. **Los mensajes 401 viven en `server`**, como «ruta no encontrada» o «método no permitido»: no son errores de validación de `link` (regla 7 de AGENTS.md), sino del adaptador HTTP.
+> 6. **Nada en el log**: ningún `log.Printf` nuevo; el único existente (`writeInternal`) sigue sin tocar la cabecera.
+> 7. Repaso final: no había duplicación que limpiar; los comentarios explican el porqué (orden de comprobaciones, el porqué del guard de token vacío, el porqué de no recortar). Tests en verde antes y después del repaso.
+>
+> ### Desviaciones de specs
+> - **Ninguna del comportamiento** de la 008 ni de la 004.
+> - **Plan técnico (001) y AGENTS.md, regla 4**: «terminado» exige `go vet ./...` y `go test ./...` en todo el repo, y `cmd/acorta` no compila (`main.go:289: not enough arguments in call to server.Handler`) hasta la 8b. Es la desviación temporal prevista en `specs/007-fases.md` (la 8b depende de la 8a). Para este encargo se ha usado `go vet ./server/` y los cuatro paquetes de Go que compilan, como pediste.
+>
+> ### Salida resumida
+> ```
+> ok  	acorta/server	0.099s
+> ok  	acorta/link	(cached)
+> ok  	acorta/store	(cached)
+> ok  	acorta/shortener	(cached)
+> ```
+> `go test ./server/ -v`: 135 PASS, 0 FAIL (26 de la 004 + 49 entradas de `auth_test.go` + subtests de redirect/static).
+
+## Verificación del orquestador (verde 8a)
+
+- `git diff --stat -- '*_test.go'`: vacío. `gofmt` y `go vet ./server/` limpios; `go test -count=1` en verde en `server`, `link`, `store` y `shortener`; cobertura de `server` 93,3 %.
+- Leído `server/auth.go` entero (unas 40 líneas) con la spec 008 al lado: el orden es método → token → cuerpo; `strings.Cut` por el primer espacio hace exactamente lo que dice AUT-03; el guard del token vacío cumple el párrafo del contrato; `crypto/subtle` como pide la spec. Las dos decisiones que la spec no cubre (solo la primera cabecera `Authorization`; la comparación filtra la longitud) se quedan como están: ninguna cambia lo que ve un usuario.
+- La desviación que declara (el repo entero no compila) es la prevista en la spec 007 y se cierra en la 8b.
+
+**Commit**: `server: token de API en crear y borrar (verde)`.

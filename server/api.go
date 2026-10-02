@@ -57,12 +57,16 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet, http.MethodHead:
 			s.listLinks(w, r)
 		case http.MethodPost:
+			if !s.authorized(w, r) {
+				return
+			}
 			s.createLink(w, r)
 		default:
 			methodNotAllowed(w, r, "GET, HEAD, POST")
 		}
 	case strings.HasPrefix(rest, "links/") && len(rest) > len("links/") && !strings.Contains(rest[len("links/"):], "/"):
-		if methodNotAllowed(w, r, "DELETE", http.MethodDelete) {
+		// Primero el método (405 de API-12), luego el token (AUT-05).
+		if methodNotAllowed(w, r, "DELETE", http.MethodDelete) || !s.authorized(w, r) {
 			return
 		}
 		s.deleteLink(w, r, strings.TrimPrefix(rest, "links/"))
