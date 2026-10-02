@@ -244,11 +244,13 @@ describe('formulario', () => {
     const w = await mountApp()
     await fill(w, { url: 'ftp://x', alias: 'A', expiry: '7 días' })
     await submit(w)
-    const live = w.find('[aria-live="polite"]')
-    expect(live.exists(), 'falta la región aria-live="polite"').toBe(true)
+    // La del formulario, no la primera del documento: desde la spec 008 hay
+    // otra región aria-live encima, la del token.
+    const live = w.find('form').element.parentElement.querySelector('[aria-live="polite"]')
+    expect(live, 'falta la región aria-live="polite" del formulario').toBeTruthy()
     for (const e of errors) {
       expect(w.text()).toContain(e)
-      expect(live.text()).toContain(e)
+      expect(live.textContent).toContain(e)
     }
     expect(field(w, 'URL').element.value).toBe('ftp://x')
     expect(field(w, 'Alias').element.value).toBe('A')
