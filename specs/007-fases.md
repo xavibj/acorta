@@ -12,12 +12,16 @@ La sesión principal es el **orquestador**: especifica, encarga, verifica y hace
 | 5 | CLI | 005 | `cmd/acorta/**` | 3, 4 |
 | 6 | Interfaz web | 006 | `web/**` | 4 |
 | 7 | Verificación de extremo a extremo | todas | ninguna (solo el orquestador) | 1–6 |
+| 8a | Autenticación en la API | 008 | `server/**` | 7 |
+| 8b | Autenticación en la CLI (`serve -token`) | 008 | `cmd/acorta/**` | 8a |
+| 8c | Autenticación en la interfaz web | 008 | `web/**` | 8a |
 
 Reglas:
 
 - `go.mod` y `go.sum` solo se tocan en la fase 0. Ningún agente ejecuta `go mod tidy`.
 - `server/static/dist/` es la salida del build de `web/` y no está en Git: ninguna fase la edita a mano. La fase 4 no necesita que exista, porque sus tests usan un sistema de ficheros en memoria (spec 004, EST).
-- Las fases van en orden. La 5 y la 6 no comparten ficheros y pueden ir en paralelo.
+- Las fases van en orden. La 5 y la 6 no comparten ficheros y pueden ir en paralelo; lo mismo la 8b y la 8c.
+- La fase 8 es el primer cambio de requisitos después de la v1 (spec 008). Cambia la firma de `server.Handler`, así que la 8b (que la llama) no puede empezar antes de que la 8a esté en verde.
 - Si una fase necesita cambiar algo fuera de sus rutas, no lo cambia: lo dice en su informe.
 
 ## Cada fase, en dos pasos

@@ -14,7 +14,7 @@ Es también el **proyecto conductor del tutorial [iadev](https://iadev.xavi.net)
 
 ## Fuera de la v1
 
-- **Autenticación**: en la v1 cualquiera que llegue a la API puede crear y borrar. Está pensado para uso local. Será la primera ampliación tras la v1, como spec nueva.
+- ~~**Autenticación**: en la v1 cualquiera que llegue a la API puede crear y borrar. Está pensado para uso local. Será la primera ampliación tras la v1, como spec nueva.~~ Hecho: spec 008 (crear y borrar exigen un token de API; listar y redirigir siguen públicos).
 - Editar un enlace ya creado (se borra y se crea otro).
 - Paginación, búsqueda u ordenación configurable del listado.
 - Analítica de visitas (origen, país, navegador, fechas): solo se guarda el total.

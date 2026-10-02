@@ -11,7 +11,7 @@ Hace falta Go 1.27 y, para la interfaz web, Node 22 o superior.
 ```sh
 git clone https://github.com/xavibj/acorta.git && cd acorta
 make build                      # compila el frontend y el binario: bin/acorta
-bin/acorta serve                # http://localhost:8080
+bin/acorta serve -token un-token-de-al-menos-16   # http://localhost:8080
 ```
 
 Desde la terminal, con el servidor en marcha o parado:
@@ -40,7 +40,7 @@ curl -X DELETE localhost:8080/api/links/promo
 
 Sin Node también funciona: `go build ./cmd/acorta` da un binario con la API, la CLI y las redirecciones, y en `/` un aviso de que falta compilar el frontend.
 
-La v1 no tiene autenticación: está pensada para uso local.
+Crear y borrar enlaces por la API exige un token (`acorta serve -token …` o `ACORTA_TOKEN`); redirigir y listar son públicos. Ver `specs/008-autenticacion.md`.
 
 ## Desarrollarlo
 
