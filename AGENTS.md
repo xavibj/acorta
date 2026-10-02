@@ -19,3 +19,9 @@
 8. Temporales fuera del repo. No hagas commits: los hace el orquestador.
 9. Informe final compacto: ficheros tocados, decisiones y su porqué,
    desviaciones de la spec, y la salida resumida de la suite.
+10. **Algo nuevo empieza por preguntas, no por código.** Ante una funcionalidad
+    nueva o un encargo ambiguo: como mucho cinco preguntas, solo las que
+    cambien qué se construye, con opciones y tu recomendación. Lo demás
+    decídelo tú, escríbelo en la spec y enuméralo en `bitacora/` (la pregunta
+    que nadie hizo, lo que has decidido y dónde está) para que se pueda
+    revisar. No implementes hasta que la spec tenga el visto bueno.
