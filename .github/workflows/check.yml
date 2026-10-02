@@ -1,0 +1,25 @@
+# La definición de terminado de la spec 001, ejecutada en cada push y en cada
+# pull request: gofmt, go vet, la suite entera (Go y Vitest) y el build del
+# frontend. Lo mismo que `make check` en local.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci
+      - run: make check

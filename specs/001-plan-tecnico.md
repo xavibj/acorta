@@ -70,3 +70,5 @@ Un cambio está terminado cuando, sobre **todo** el repositorio y no solo lo toc
 2. Si toca `web/`: sus tests pasan y `npm run build` termina sin errores.
 3. Cada criterio nuevo o cambiado de la spec tiene al menos un test que lo nombra.
 4. Si el cambio contradice una spec, la spec se ha actualizado en el mismo cambio.
+
+Los puntos 1 y 2 son `make check`, y se ejecutan también en GitHub en cada push y cada pull request (`.github/workflows/check.yml`), con la misma orden. El 3 se puede comprobar con un `grep` por criterio (la orden del capítulo 05 del tutorial); el 4, leyendo.

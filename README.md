@@ -46,7 +46,7 @@ Crear y borrar enlaces por la API exige un token (`acorta serve -token …` o `A
 
 ```sh
 make test       # tests de Go y de la interfaz
-make check      # formato, go vet, tests y build del frontend
+make check      # formato, go vet, tests y build del frontend; lo mismo corre en GitHub en cada push
 ```
 
 Las reglas están en [`AGENTS.md`](AGENTS.md): nada se implementa sin estar en una spec, los tests van antes y fallan antes de pasar, y nadie cambia un test para que pase.
