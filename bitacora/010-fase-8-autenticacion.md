@@ -590,3 +590,27 @@ Informe final del agente:
 > **`npm test`** en `web/`: 59 passed (59). **`npm run build`**: sin errores (`index-D4ysEhmi.js` 75.54 kB, gzip 29.04 kB; CSS 14.69 kB, gzip 3.89 kB).
 
 **Commit**: `web: token de API en la interfaz (verde)`.
+
+## Verificación de la fase 8 (el orquestador, sin agentes)
+
+Con el binario compilado (`make build`) y una base de datos nueva:
+
+- `serve` sin token: `error: falta el token de API: usa -token o ACORTA_TOKEN`, salida 1. Con `-token corto`: `error: el token de API debe tener al menos 16 caracteres`, salida 1. Con un token válido arranca y el mensaje de arranque no lo contiene; el log tampoco.
+- `curl`: `POST /api/links` sin token → 401, `WWW-Authenticate: Bearer`, `falta el token de API`; con token malo → 401, `token de API incorrecto`; sin token y cuerpo inválido → 401 (no 400); con token bueno → 201. `GET /api/links` y `GET /promo` sin token → 200 y 302. `DELETE` sin token, exista o no el código → 401; `PUT /api/links` sin token → 405; `DELETE` con `bearer` en minúsculas y el token bueno → 204, y después `GET /promo` → 404. `acorta add` por CLI sigue funcionando sin token.
+- Navegador real (Chromium sin interfaz) a 390 y a 1280 px: crear sin token muestra `falta el token de API` tal cual y el foco va al campo del token; guardar un token con espacios lo deja recortado en el campo y en `sessionStorage`, con `Token guardado`; crear y borrar funcionan con el token; tras recargar, el token sigue; un token equivocado muestra `token de API incorrecto` y no borra el guardado. Sin scroll horizontal. Campo y botón de 44 px.
+
+## Estado al cerrar la fase 8
+
+| | |
+|---|---|
+| Criterios en las specs | 113 (13 nuevos, AUT-01 a AUT-13) |
+| Tests Go | 307 casos hoja (eran 246) |
+| Tests de la interfaz | 59 (eran 38) |
+| Commits de la fase | 10: 3 de spec, 3 en rojo, 3 en verde y 1 arreglo de tests |
+
+## Lo que enseñó el cambio
+
+- **Un cambio de requisitos empieza en la spec y la spec dice qué arrastra.** Una spec nueva (008) y cinco líneas en otras cuatro (000, 004, 005, 006, 007): el contrato de `Handler`, la sinopsis de `serve`, la tabla de configuración, el 401 en WEB-04, la fase nueva. Sin tocar `link`, `store` ni `shortener`.
+- **El paso rojo volvió a ser un revisor de specs**: once ambigüedades entre los tres agentes, nueve cerradas en la spec antes de implementar (espacios en la cabecera, token de solo espacios, el orden token → base de datos, Enter en el campo, la región `aria-live`, el 401 en WEB-04…).
+- **Los tests viejos también cambian, pero en el rojo.** Tres veces un agente avisó de que los tests de la v1 iban a romperse en el verde (los de la API sin cabecera, los de `serve` sin token, la sinopsis vieja). Las tres veces se arregló en el paso rojo, con la spec actualizada, para que ningún commit verde tocara un test.
+- **La regla 3 sigue funcionando.** El agente de la web encontró tres tests de WEB-04 que daban por hecho una sola región `aria-live`; no los tocó, dejó un compromiso comentado y lo dijo. El orquestador los corrigió en un commit propio, y al hacerlo se equivocó una vez: los tests lo cazaron antes de confirmar.
