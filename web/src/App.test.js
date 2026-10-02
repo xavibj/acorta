@@ -126,6 +126,7 @@ const shortHrefs = (wrapper) => wrapper.findAll('a[target="_blank"]').map((a) =>
 let confirmMock, writeText
 
 beforeEach(() => {
+  sessionStorage.clear() // AUT-11: el token guardado no debe filtrarse entre tests
   confirmMock = vi.fn(() => true)
   vi.stubGlobal('confirm', confirmMock)
   window.confirm = confirmMock
@@ -516,5 +517,246 @@ describe('listado', () => {
     mockApi({ 'GET /api/links': new TypeError('Failed to fetch') })
     const w = await mountApp()
     expect(w.text()).toContain('No se ha podido cargar la lista de enlaces.')
+  })
+})
+
+// ---------- autenticación (spec 008) ----------
+
+const TOKEN_KEY = 'acorta_token'
+const TOKEN = 'token-de-prueba-123456' // 22 caracteres: cumple el mínimo de 16 de la spec 008
+
+// Valor de una cabecera de una llamada a fetch, sin distinguir mayúsculas en el
+// nombre. undefined si la petición no la lleva (o no lleva cabeceras).
+function headerOf([, opts = {}], name) {
+  const h = opts.headers
+  if (!h) return undefined
+  if (typeof h.get === 'function') return h.get(name) ?? undefined
+  const key = Object.keys(h).find((k) => k.toLowerCase() === name.toLowerCase())
+  return key === undefined ? undefined : h[key]
+}
+
+// Cabeceras Authorization de todas las peticiones a method+path, en orden.
+function authHeaders(fn, method, path) {
+  return fn.mock.calls
+    .filter(([url, opts = {}]) => (opts.method || 'GET').toUpperCase() === method && String(url) === path)
+    .map((c) => headerOf(c, 'Authorization'))
+}
+
+const tokenField = (wrapper) => field(wrapper, 'Token de API')
+
+async function saveToken(wrapper, value) {
+  await tokenField(wrapper).setValue(value)
+  await button(wrapper, 'Guardar').trigger('click')
+  await settle()
+}
+
+const expectTokenFocused = (wrapper) =>
+  expect(document.activeElement, 'el campo Token de API no tiene el foco').toBe(tokenField(wrapper).element)
+
+describe('autenticación', () => {
+  it('AUT-11: el campo Token de API es type="password", tiene su <label> y va encima del formulario de creación', async () => {
+    mockApi()
+    const w = await mountApp()
+    const token = tokenField(w)
+    expect(token.attributes('type')).toBe('password')
+    expect(button(w, 'Guardar').exists()).toBe(true)
+    // encima del formulario: el campo precede en el documento al campo URL
+    const antes = token.element.compareDocumentPosition(field(w, 'URL').element)
+    expect(antes & Node.DOCUMENT_POSITION_FOLLOWING, 'el token no va encima del formulario').toBeTruthy()
+  })
+
+  it('AUT-11: al pulsar Guardar guarda el token recortado bajo acorta_token y muestra «Token guardado»', async () => {
+    mockApi()
+    const w = await mountApp()
+    expect(w.text()).not.toContain('Token guardado')
+    await saveToken(w, `  ${TOKEN}  `)
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe(TOKEN)
+    expect(w.text()).toContain('Token guardado')
+    // es un mensaje de estado: va en una región aria-live="polite" (spec 006, Diseño)
+    const live = w.findAll('[aria-live="polite"]').find((r) => r.text().includes('Token guardado'))
+    expect(live, 'el estado «Token guardado» no está en una región aria-live="polite"').toBeTruthy()
+  })
+
+  it('AUT-11: Enter dentro del campo guarda el token igual que el botón Guardar', async () => {
+    mockApi()
+    const w = await mountApp()
+    await tokenField(w).setValue(`  ${TOKEN}  `)
+    await tokenField(w).trigger('keydown', { key: 'Enter' })
+    await tokenField(w).trigger('keyup', { key: 'Enter' })
+    await settle()
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe(TOKEN)
+    expect(w.text()).toContain('Token guardado')
+  })
+
+  it('AUT-11: tras guardar, el campo pasa a mostrar el valor recortado', async () => {
+    mockApi()
+    const w = await mountApp()
+    await saveToken(w, '  token-con-espacios-1234  ')
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('token-con-espacios-1234')
+    expect(tokenField(w).element.value).toBe('token-con-espacios-1234')
+  })
+
+  it('AUT-11: el campo del token no contiene ni está dentro de un <form>; el único formulario es el de creación', async () => {
+    mockApi()
+    const w = await mountApp()
+    expect(tokenField(w).element.closest('form'), 'el campo del token está dentro de un <form>').toBeNull()
+    expect(button(w, 'Guardar').element.closest('form'), 'el botón Guardar está dentro de un <form>').toBeNull()
+    const forms = w.findAll('form')
+    expect(forms).toHaveLength(1)
+    expect(forms[0].find('button[type="submit"]').text().trim()).toBe('Acortar')
+  })
+
+  it('AUT-11: al cargar con un token guardado, el campo aparece relleno y en estado «Token guardado»', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    mockApi()
+    const w = await mountApp()
+    expect(tokenField(w).element.value).toBe(TOKEN)
+    expect(w.text()).toContain('Token guardado')
+  })
+
+  it('AUT-11: al cargar sin token guardado, el campo está vacío y no muestra «Token guardado»', async () => {
+    mockApi()
+    const w = await mountApp()
+    expect(tokenField(w).element.value).toBe('')
+    expect(w.text()).not.toContain('Token guardado')
+  })
+
+  it.each([
+    ['vacío', ''],
+    ['solo espacios', '   '],
+  ])('AUT-11: guardar un campo %s borra el token guardado', async (_, value) => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    mockApi()
+    const w = await mountApp()
+    expect(w.text()).toContain('Token guardado')
+    await saveToken(w, value)
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
+    expect(w.text()).not.toContain('Token guardado')
+  })
+
+  it('AUT-12: crear (WEB-01) envía Authorization: Bearer <token guardado>', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    const fn = mockApi({ 'POST /api/links': res(201, link()) })
+    const w = await mountApp()
+    await fill(w, { url: 'https://example.com' })
+    await submit(w)
+    expect(authHeaders(fn, 'POST', '/api/links')).toEqual([`Bearer ${TOKEN}`])
+    // y sigue enviando el cuerpo de WEB-01 como JSON
+    expect(callsTo(fn, 'POST', '/api/links')[0].body).toEqual({ url: 'https://example.com' })
+    expect(headerOf(fn.mock.calls.find(([, o = {}]) => o.method === 'POST'), 'Content-Type')).toBe('application/json')
+  })
+
+  it('AUT-12: crear usa el token guardado con Guardar en la misma sesión, sin recargar', async () => {
+    const fn = mockApi({ 'POST /api/links': res(201, link()) })
+    const w = await mountApp()
+    await saveToken(w, TOKEN)
+    await fill(w, { url: 'https://example.com' })
+    await submit(w)
+    expect(authHeaders(fn, 'POST', '/api/links')).toEqual([`Bearer ${TOKEN}`])
+  })
+
+  it('AUT-12: crear sin token guardado no envía la cabecera Authorization', async () => {
+    const fn = mockApi({ 'POST /api/links': res(201, link()) })
+    const w = await mountApp()
+    await fill(w, { url: 'https://example.com' })
+    await submit(w)
+    expect(authHeaders(fn, 'POST', '/api/links')).toEqual([undefined])
+  })
+
+  it('AUT-12: tras borrar el token con Guardar vacío, crear ya no envía la cabecera', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    const fn = mockApi({ 'POST /api/links': res(201, link()) })
+    const w = await mountApp()
+    await saveToken(w, '')
+    await fill(w, { url: 'https://example.com' })
+    await submit(w)
+    expect(authHeaders(fn, 'POST', '/api/links')).toEqual([undefined])
+  })
+
+  it('AUT-12: borrar (WEB-12) envía Authorization: Bearer <token guardado>', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    const fn = mockApi({
+      'GET /api/links': res(200, [link({ code: 'promo', short_url: 'http://localhost:8080/promo' })]),
+      'DELETE /api/links/promo': res(204),
+    })
+    const w = await mountApp()
+    await button(w, 'Borrar').trigger('click')
+    await settle()
+    expect(authHeaders(fn, 'DELETE', '/api/links/promo')).toEqual([`Bearer ${TOKEN}`])
+    expect(shortHrefs(w)).toEqual([])
+  })
+
+  it('AUT-12: borrar sin token guardado no envía la cabecera Authorization', async () => {
+    const fn = mockApi({
+      'GET /api/links': res(200, [link({ code: 'promo', short_url: 'http://localhost:8080/promo' })]),
+      'DELETE /api/links/promo': res(204),
+    })
+    const w = await mountApp()
+    await button(w, 'Borrar').trigger('click')
+    await settle()
+    expect(authHeaders(fn, 'DELETE', '/api/links/promo')).toEqual([undefined])
+  })
+
+  it.each([
+    ['con token guardado', true],
+    ['sin token guardado', false],
+  ])('AUT-12: cargar el listado (WEB-08) y Actualizar (WEB-13) no envían Authorization %s', async (_, saved) => {
+    if (saved) sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    const fn = mockApi({ 'GET /api/links': res(200, [link()]) })
+    const w = await mountApp()
+    await button(w, 'Actualizar').trigger('click')
+    await settle()
+    expect(authHeaders(fn, 'GET', '/api/links')).toEqual([undefined, undefined])
+  })
+
+  it('AUT-13: un 401 al crear sin token muestra «falta el token de API» tal cual y el campo del token recibe el foco', async () => {
+    mockApi({ 'POST /api/links': res(401, { errors: ['falta el token de API'] }) })
+    const w = await mountApp()
+    await fill(w, { url: 'https://example.com', alias: 'promo' })
+    await submit(w)
+    expect(w.text()).toContain('falta el token de API')
+    expectTokenFocused(w)
+    // como cualquier otro error de la API (WEB-04): conserva lo escrito y no hay resultado
+    expect(field(w, 'URL').element.value).toBe('https://example.com')
+    expect(field(w, 'Alias').element.value).toBe('promo')
+    expect(buttons(w, 'Copiar')).toHaveLength(0)
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
+  })
+
+  it('AUT-13: un 401 al crear con token guardado muestra el error tal cual, da el foco al token y no lo borra', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    mockApi({ 'POST /api/links': res(401, { errors: ['token de API incorrecto'] }) })
+    const w = await mountApp()
+    await fill(w, { url: 'https://example.com' })
+    await submit(w)
+    expect(w.text()).toContain('token de API incorrecto')
+    expectTokenFocused(w)
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe(TOKEN)
+    expect(tokenField(w).element.value).toBe(TOKEN)
+  })
+
+  it('AUT-13: un 401 al borrar muestra el error tal cual, el enlace sigue en el listado, el token recibe el foco y no se borra', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    mockApi({
+      'GET /api/links': res(200, [link({ code: 'promo', short_url: 'http://localhost:8080/promo' })]),
+      'DELETE /api/links/promo': res(401, { errors: ['falta el token de API'] }),
+    })
+    const w = await mountApp()
+    await button(w, 'Borrar').trigger('click')
+    await settle()
+    expect(w.text()).toContain('falta el token de API')
+    expect(shortHrefs(w)).toEqual(['http://localhost:8080/promo'])
+    expectTokenFocused(w)
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe(TOKEN)
+  })
+
+  it('AUT-13: los demás errores al crear (400) no mueven el foco al campo del token', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    mockApi({ 'POST /api/links': res(400, { errors: ['url: debe empezar por http:// o https://'] }) })
+    const w = await mountApp()
+    await fill(w, { url: 'ftp://x' })
+    await submit(w)
+    expect(w.text()).toContain('url: debe empezar por http:// o https://')
+    expect(document.activeElement).not.toBe(tokenField(w).element)
   })
 })

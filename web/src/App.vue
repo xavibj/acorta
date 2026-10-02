@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { deleteLink, listLinks } from './api.js'
 import LinkForm from './components/LinkForm.vue'
 import LinkList from './components/LinkList.vue'
+import TokenField from './components/TokenField.vue'
 
 const links = ref([])
 const loading = ref(true)
@@ -40,6 +41,7 @@ onMounted(load)
         <h1 class="text-3xl font-bold tracking-tight">acorta</h1>
         <p class="mt-1 text-slate-600 dark:text-slate-400">Acorta una URL larga y compártela.</p>
       </header>
+      <TokenField />
       <LinkForm @created="onCreated" />
       <LinkList
         :links="links"
