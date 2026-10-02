@@ -35,7 +35,7 @@ func TestAPI02_BarraFinalEnBaseURL(t *testing.T) {
 	for _, base := range []string{"http://localhost:8080/", "http://localhost:8080"} {
 		t.Run("API-02 base "+base, func(t *testing.T) {
 			e := newEnv(t, staticFS())
-			h := server.Handler(e.svc, base, staticFS())
+			h := server.Handler(e.svc, base, staticFS(), testToken)
 			w := do(h, http.MethodPost, "/api/links", `{"url":"https://example.com"}`)
 			wantStatus(t, w, http.StatusCreated)
 			if got := decodeMap(t, w)["short_url"]; got != "http://localhost:8080/aaaaaa" {

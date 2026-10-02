@@ -14,7 +14,7 @@ import (
 
 // handlerFor monta el Handler sobre un servicio dado y los estáticos de prueba.
 func handlerFor(svc server.Service) http.Handler {
-	return server.Handler(svc, baseURL, staticFS())
+	return server.Handler(svc, baseURL, staticFS(), testToken)
 }
 
 // wantMedia comprueba el tipo de contenido sin mirar parámetros como charset.

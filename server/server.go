@@ -49,8 +49,12 @@ type server struct {
 }
 
 // Handler devuelve el servidor completo. baseURL se usa para short_url;
-// static es el sistema de ficheros con sin-compilar.html y, si existe, dist/.
-func Handler(svc Service, baseURL string, static fs.FS) http.Handler {
+// static es el sistema de ficheros con sin-compilar.html y, si existe, dist/;
+// token es el token de API que exigen POST /api/links y
+// DELETE /api/links/{código} (spec 008).
+func Handler(svc Service, baseURL string, static fs.FS, token string) http.Handler {
+	// TODO(8a): la comprobación del token aún no está implementada.
+	_ = token
 	return &server{svc: svc, baseURL: strings.TrimRight(baseURL, "/"), static: static}
 }
 

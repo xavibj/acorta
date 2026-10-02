@@ -20,6 +20,9 @@ import (
 
 const baseURL = "http://localhost:8080"
 
+// testToken es el token de API con el que se monta el Handler en los tests.
+const testToken = "token-de-prueba-0123456789"
+
 // t0 es el instante fijo en el que arranca el reloj de los tests.
 var t0 = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 
@@ -69,7 +72,7 @@ func newEnv(t *testing.T, static fs.FS, codes ...string) *env {
 			e.nextIdx++
 			return e.codes[i], nil
 		})
-	e.h = server.Handler(e.svc, baseURL, static)
+	e.h = server.Handler(e.svc, baseURL, static, testToken)
 	return e
 }
 
@@ -102,18 +105,11 @@ func (e *env) visits(code string) int64 {
 	return 0
 }
 
-// do lanza una petición contra h.
+// do lanza una petición contra h con el token de API correcto (spec 008,
+// AUT-04: con él, todo se comporta como en la spec 004). Los tests que
+// controlan la cabecera Authorization usan doAuth (auth_test.go).
 func do(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
-	var r *http.Request
-	if body == "" {
-		r = httptest.NewRequest(method, path, nil)
-	} else {
-		r = httptest.NewRequest(method, path, strings.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
-	}
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	return w
+	return doAuth(h, method, path, "Bearer "+testToken, body)
 }
 
 // wantStatus comprueba el estado.
